@@ -1,0 +1,3 @@
+
+* TODO Homework 1
+** TODO point out that tf's dropout scales neurons for you
