@@ -8,6 +8,24 @@ $ pip install --upgrade sklearn pandas scipy numpy matplotlib
 $ pip install --upgrade https://storage.googleapis.com/tensorflow/mac/tensorflow-0.9.0-py2-none-any.whl
 $ pip install jupyter
 
+I'm using virtualenv on the local mac:
 To make tensorflow work, run
 
 source ~/tf/bin/activate
+
+Logging into hpc
+
+ssh akp258@hpc.nyu.edu
+ssh mercer
+
+in mercer, i've used conda instead of virtualenv
+To activate this environment, use:
+$ source activate tensorflow
+
+To deactivate this environment, use:
+$ source deactivate
+
+installing tensorflow with this in the env:
+conda install -c conda-forge tensorflow
+
+

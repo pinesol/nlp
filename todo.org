@@ -1,3 +1,30 @@
 
 * TODO Homework 1
-** TODO point out that tf's dropout scales neurons for you
+** TODO write code that lets you choose the number of conv layers
+
+
+** DONE point out that tf's dropout scales neurons for you
+https://www.tensorflow.org/versions/r0.10/tutorials/mnist/pros/index.html#dropout
+** DONE Read blog post reviewing convolutions and nlp
+http://www.wildml.com/2015/11/understanding-convolutional-neural-networks-for-nlp/
+** TODO look into using tensorboard
+https://www.tensorflow.org/versions/master/how_tos/summaries_and_tensorboard/index.html#tensorboard-visualizing-learning
+** TODO read about tf.embedding_lookup
+https://www.tensorflow.org/versions/master/api_docs/python/nn.html#embedding_lookup
+
+** TODO Experiment 1: Baseline
+stats to record: validation accuracy, and runtime.
+
+if run time is greater than 
+
+
+** TODO Experiment 2: Baseline, Dropout
+** TODO Experiment 3: Two convolution+pooling layers, no dropout
+** TODO Experiment 4: Two convolution+pooling layers, dropout
+** TODO Experiment 5: Baseline, filter size 4,5,6
+
+
+** TODO writeup
+
+
+* TODO Watch lecture 1
