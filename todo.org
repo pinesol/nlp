@@ -19,6 +19,7 @@ if run time is greater than
 
 
 ** TODO Experiment 2: Baseline, Dropout
+./train --dropout_keep_prob=1
 ** TODO Experiment 3: Two convolution+pooling layers, no dropout
 ** TODO Experiment 4: Two convolution+pooling layers, dropout
 ** TODO Experiment 5: Baseline, filter size 4,5,6
