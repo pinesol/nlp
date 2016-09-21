@@ -11,7 +11,6 @@ from tensorflow.contrib import learn
 
 # Parameters
 # ==================================================
-
 # Model Hyperparameters
 tf.flags.DEFINE_integer("embedding_dim", 64, "Dimensionality of character embedding (default: 64)") # TODO try 128, the orig
 tf.flags.DEFINE_string("filter_sizes", "3,4,5", "Comma-separated filter sizes (default: '3,4,5')")
@@ -23,10 +22,13 @@ tf.flags.DEFINE_float("dropout_keep_prob", 0.5, "Dropout probability (default: 0
 tf.flags.DEFINE_integer("batch_size", 32, "Batch Size (default: 64)")
 tf.flags.DEFINE_integer("num_epochs", 50, "Number of training epochs (default: 50)") # TODO try orig: 500
 tf.flags.DEFINE_integer("evaluate_every", 200, "Evaluate model on dev set after this many steps (default: 200)")
-tf.flags.DEFINE_integer("checkpoint_every", 200, "Save model after this many steps (default: 200)")
+tf.flags.DEFINE_integer("checkpoint_every", 1000, "Save model after this many steps (default: 1000)")
 # Misc Parameters
 tf.flags.DEFINE_boolean("allow_soft_placement", True, "Allow device soft device placement")
 tf.flags.DEFINE_boolean("log_device_placement", False, "Log placement of ops on devices")
+
+tf.flags.DEFINE_boolean("test", False, "If true, the model is run on a much smaller dataset. Overrides some flags.")
+tf.flags.DEFINE_string("exp_name", 'exp', "The name of the experiment. Made into a directory to store similar runs.")
 
 FLAGS = tf.flags.FLAGS
 FLAGS._parse_flags()
@@ -42,7 +44,18 @@ print("")
 # Load data
 print("Loading data...")
 x_text, y = data_helpers.load_data_and_labels()
+if FLAGS.test:
+    TEST_DATA_LEN = 1000
+    TEST_NUM_EPOCHS = 5
+    print('Testing mode is on, only using the first {} data points'.format(TEST_DATA_LEN))
+    x_text = x_text[:TEST_DATA_LEN]
+    y = y[:TEST_DATA_LEN]
+    print('Testing mode is on: only doing {} epochs'.format(TEST_NUM_EPOCHS))
+    FLAGS.num_epochs = TEST_NUM_EPOCHS
+    FLAGS.exp_name = 'test'
 
+print('Using exp_name {}'.format(FLAGS.exp_name))
+                        
 # Build vocabulary
 max_document_length = max([len(x.split(" ")) for x in x_text])
 vocab_processor = learn.preprocessing.VocabularyProcessor(max_document_length) # TODO vocabularyProcessor?
@@ -56,8 +69,10 @@ y_shuffled = y[shuffle_indices]
 
 # Split train/test set
 # TODO: This is very crude, should use cross-validation
-x_train, x_dev = x_shuffled[:-1000], x_shuffled[-1000:]
-y_train, y_dev = y_shuffled[:-1000], y_shuffled[-1000:]
+train_set_size = len(x_text) / 10
+
+x_train, x_dev = x_shuffled[:-train_set_size], x_shuffled[-train_set_size:]
+y_train, y_dev = y_shuffled[:-train_set_size], y_shuffled[-train_set_size:]
 print("Vocabulary Size: {:d}".format(len(vocab_processor.vocabulary_)))
 print("Train/Dev split: {:d}/{:d}".format(len(y_train), len(y_dev)))
 
@@ -97,7 +112,7 @@ with tf.Graph().as_default(): # TODO tf Graph.as_default?
 
         # Output directory for models and summaries
         timestamp = str(int(time.time()))
-        out_dir = os.path.abspath(os.path.join(os.path.curdir, "runs", timestamp))
+        out_dir = os.path.abspath(os.path.join(os.path.curdir, "runs", FLAGS.exp_name, timestamp))
         print("Writing to {}\n".format(out_dir))
 
         # Summaries for loss and accuracy
@@ -150,7 +165,7 @@ with tf.Graph().as_default(): # TODO tf Graph.as_default?
             feed_dict = {
               cnn.input_x: x_batch,
               cnn.input_y: y_batch,
-              cnn.dropout_keep_prob: FLAGS.dropout_keep_prob
+              cnn.dropout_keep_prob: 1  # don't do dropout on validation
             }
             step, summaries, loss, accuracy = sess.run(
                 [global_step, dev_summary_op, cnn.loss, cnn.accuracy],
@@ -163,6 +178,7 @@ with tf.Graph().as_default(): # TODO tf Graph.as_default?
         # Generate batches
         batches = data_helpers.batch_iter(
             list(zip(x_train, y_train)), FLAGS.batch_size, FLAGS.num_epochs)
+        current_step = None
         # Training loop. For each batch...
         for batch in batches: # TODO what are the batch objects?
             x_batch, y_batch = zip(*batch)
@@ -175,3 +191,10 @@ with tf.Graph().as_default(): # TODO tf Graph.as_default?
             if current_step % FLAGS.checkpoint_every == 0:
                 path = saver.save(sess, checkpoint_prefix, global_step=current_step)
                 print("Saved model checkpoint to {}\n".format(path))
+        # Eval and checkpoint if it wasn't done on the last step
+        if current_step % FLAGS.evaluate_every != 0:
+            print("\nEvaluation:")
+            dev_step(x_dev, y_dev, writer=dev_summary_writer)
+        if current_step % FLAGS.checkpoint_every != 0:
+            path = saver.save(sess, checkpoint_prefix, global_step=current_step)
+            print("Saved model checkpoint to {}\n".format(path))
