@@ -46,7 +46,7 @@ print("Loading data...")
 x_text, y = data_helpers.load_data_and_labels()
 if FLAGS.test:
     TEST_DATA_LEN = 1000
-    TEST_NUM_EPOCHS = 5
+    TEST_NUM_EPOCHS = 10
     print('Testing mode is on, only using the first {} data points'.format(TEST_DATA_LEN))
     x_text = x_text[:TEST_DATA_LEN]
     y = y[:TEST_DATA_LEN]
@@ -83,7 +83,7 @@ with tf.Graph().as_default(): # TODO tf Graph.as_default?
     session_conf = tf.ConfigProto(
       allow_soft_placement=FLAGS.allow_soft_placement,
       log_device_placement=FLAGS.log_device_placement)
-    sess = tf.Session(config=session_conf) # TODO what is a session again?
+    sess = tf.Session(config=session_conf)
     with sess.as_default():
         cnn = TextCNN(
             sequence_length=x_train.shape[1],
@@ -96,7 +96,7 @@ with tf.Graph().as_default(): # TODO tf Graph.as_default?
 
         # Define Training procedure
         global_step = tf.Variable(0, name="global_step", trainable=False)
-        optimizer = tf.train.AdamOptimizer(1e-3) # TODO adam optimizer?
+        optimizer = tf.train.AdamOptimizer(1e-3)
         grads_and_vars = optimizer.compute_gradients(cnn.loss)
         train_op = optimizer.apply_gradients(grads_and_vars, global_step=global_step)
 
@@ -156,9 +156,10 @@ with tf.Graph().as_default(): # TODO tf Graph.as_default?
                 feed_dict)
             time_str = datetime.datetime.now().isoformat()
             print("{}: step {}, loss {:g}, acc {:g}".format(time_str, step, loss, accuracy))
-            train_summary_writer.add_summary(summaries, step)
+            if step % 20 == 0:
+                train_summary_writer.add_summary(summaries, step)
 
-        def dev_step(x_batch, y_batch, writer=None):
+        def dev_step(x_batch, y_batch):
             """
             Evaluates model on a dev set
             """
@@ -172,9 +173,9 @@ with tf.Graph().as_default(): # TODO tf Graph.as_default?
                 feed_dict)
             time_str = datetime.datetime.now().isoformat()
             print("{}: step {}, loss {:g}, acc {:g}".format(time_str, step, loss, accuracy))
-            if writer:
-                writer.add_summary(summaries, step)
+            dev_summary_writer.add_summary(summaries, step)
 
+            
         # Generate batches
         batches = data_helpers.batch_iter(
             list(zip(x_train, y_train)), FLAGS.batch_size, FLAGS.num_epochs)
@@ -186,7 +187,7 @@ with tf.Graph().as_default(): # TODO tf Graph.as_default?
             current_step = tf.train.global_step(sess, global_step)
             if current_step % FLAGS.evaluate_every == 0:
                 print("\nEvaluation:")
-                dev_step(x_dev, y_dev, writer=dev_summary_writer)
+                dev_step(x_dev, y_dev)
                 print("")
             if current_step % FLAGS.checkpoint_every == 0:
                 path = saver.save(sess, checkpoint_prefix, global_step=current_step)
@@ -194,7 +195,11 @@ with tf.Graph().as_default(): # TODO tf Graph.as_default?
         # Eval and checkpoint if it wasn't done on the last step
         if current_step % FLAGS.evaluate_every != 0:
             print("\nEvaluation:")
-            dev_step(x_dev, y_dev, writer=dev_summary_writer)
+            dev_step(x_dev, y_dev)
         if current_step % FLAGS.checkpoint_every != 0:
             path = saver.save(sess, checkpoint_prefix, global_step=current_step)
             print("Saved model checkpoint to {}\n".format(path))
+        train_summary_writer.close()
+        dev_summary_writer.close()
+
+            
