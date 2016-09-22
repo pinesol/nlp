@@ -29,6 +29,7 @@ tf.flags.DEFINE_boolean("log_device_placement", False, "Log placement of ops on 
 
 tf.flags.DEFINE_boolean("test", False, "If true, the model is run on a much smaller dataset. Overrides some flags.")
 tf.flags.DEFINE_string("exp_name", 'exp', "The name of the experiment. Made into a directory to store similar runs.")
+tf.flags.DEFINE_boolean(add_second_conv_layer, False, "If true, add a second layer of convolution and pooling.")
 
 FLAGS = tf.flags.FLAGS
 FLAGS._parse_flags()
@@ -92,7 +93,8 @@ with tf.Graph().as_default(): # TODO tf Graph.as_default?
             embedding_size=FLAGS.embedding_dim,
             filter_sizes=list(map(int, FLAGS.filter_sizes.split(","))),
             num_filters=FLAGS.num_filters,
-            l2_reg_lambda=FLAGS.l2_reg_lambda)
+            l2_reg_lambda=FLAGS.l2_reg_lambda,
+            add_second_conv_layer=FLAGS.add_second_conv_layer)
 
         # Define Training procedure
         global_step = tf.Variable(0, name="global_step", trainable=False)

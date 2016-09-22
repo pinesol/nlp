@@ -9,7 +9,7 @@ class TextCNN(object):
     """
     def __init__(
       self, sequence_length, num_classes, vocab_size,
-      embedding_size, filter_sizes, num_filters, l2_reg_lambda=0.0):
+            embedding_size, filter_sizes, num_filters, l2_reg_lambda=0.0, add_second_conv_layer=False):
 
         # Placeholders for input, output and dropout (which you need to implement!!!!)
         self.input_x = tf.placeholder(tf.int32, [None, sequence_length], name="input_x")
@@ -42,7 +42,6 @@ class TextCNN(object):
                     padding="VALID",
                     name="conv")
                 # Apply nonlinearity
-#                h = tf.nn.tanh(tf.nn.bias_add(conv, b), name="tanh") # Old version
                 # Problem 1: Activation
                 h = tf.nn.relu(tf.nn.bias_add(conv, b), name="relu")
                 # Maxpooling over the outputs
@@ -54,16 +53,18 @@ class TextCNN(object):
                     name="pool")
                 pooled_outputs.append(pooled)
 
+                # TODO add another convolution and pooling layer here
+                if self.add_second_conv_layer:
+                    pass
+
         # Combine all the pooled features
         num_filters_total = num_filters * len(filter_sizes)
-        self.h_pool = tf.concat(3, pooled_outputs) # TODO what does tf.concat do exactly?
+        self.h_pool = tf.concat(3, pooled_outputs)
         self.h_pool_flat = tf.reshape(self.h_pool, [-1, num_filters_total])
 
         # Problem 2: Regularization
         with tf.name_scope("dropout"):
             self.h_drop = tf.nn.dropout(self.h_pool_flat, self.dropout_keep_prob)
-
-        # TODO multipy outgoing weights by .5 in eval?
 
         # Final (unnormalized) scores and predictions
         with tf.name_scope("output"):
