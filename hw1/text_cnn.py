@@ -15,7 +15,7 @@ class TextCNN(object):
         self.input_x = tf.placeholder(tf.int32, [None, sequence_length], name="input_x")
         self.input_y = tf.placeholder(tf.float32, [None, num_classes], name="input_y")
         self.dropout_keep_prob = tf.placeholder(tf.float32, name="dropout_keep_prob")
-
+        
         # Keeping track of l2 regularization loss (optional)
         l2_loss = tf.constant(0.0)
 
@@ -27,12 +27,14 @@ class TextCNN(object):
             self.embedded_chars = tf.nn.embedding_lookup(W, self.input_x)
             self.embedded_chars_expanded = tf.expand_dims(self.embedded_chars, -1) # TODO expand_dims?
 
+        # embedded_chars_expanded dims: [batch_size=?, sequence_length=sequence_length (56), embedding_size=64, channels=1]
+            
         # Create a convolution + maxpool layer for each filter size
         pooled_outputs = []
         for i, filter_size in enumerate(filter_sizes):
             with tf.name_scope("conv-maxpool-%s" % filter_size):
                 # Convolution Layer
-                filter_shape = [filter_size, embedding_size, 1, num_filters]
+                filter_shape = [filter_size, embedding_size, 1, num_filters]  #height, width, input channel depth, output channel depth
                 W = tf.Variable(tf.truncated_normal(filter_shape, stddev=0.1), name="W")
                 b = tf.Variable(tf.constant(0.1, shape=[num_filters]), name="b")
                 conv = tf.nn.conv2d(
@@ -41,22 +43,41 @@ class TextCNN(object):
                     strides=[1, 1, 1, 1],
                     padding="VALID",
                     name="conv")
-                # Apply nonlinearity
                 # Problem 1: Activation
                 h = tf.nn.relu(tf.nn.bias_add(conv, b), name="relu")
+                # h dimension = [batch_size=?, senquence_length=sequence_length-filter_size+1, 1, num_filters]
+                # inputs to the pooling layer
+                layer_to_pool = h
+                convd_sequence_length = sequence_length - filter_size + 1
+                
+                if add_second_conv_layer:
+                    # Convolution Layer
+                    filter_shape2 = [filter_size, 1, num_filters, num_filters]  # TODO not confident in this
+                    W2 = tf.Variable(tf.truncated_normal(filter_shape2, stddev=0.1), name="W2")
+                    b2 = tf.Variable(tf.constant(0.1, shape=[num_filters]), name="b2")
+                    conv2 = tf.nn.conv2d(
+                        h,
+                        W2,
+                        strides=[1, 1, 1, 1],
+                        padding="VALID",
+                        name="conv2")
+                    # Apply nonlinearity
+                    # Problem 1: Activation
+                    h2 = tf.nn.relu(tf.nn.bias_add(conv2, b2), name="relu2")
+                    # Update inputs to the pooling layer
+                    layer_to_pool = h2
+                    convd_sequence_length = convd_sequence_length - filter_size + 1
+
                 # Maxpooling over the outputs
+                # size of the pooled layer output: "[batch_size, 1, 1, num_filters]"
                 pooled = tf.nn.max_pool(
-                    h,
-                    ksize=[1, sequence_length - filter_size + 1, 1, 1],
+                    layer_to_pool,
+                    ksize=[1, convd_sequence_length, 1, 1],
                     strides=[1, 1, 1, 1],
                     padding='VALID',
                     name="pool")
                 pooled_outputs.append(pooled)
-
-                # TODO add another convolution and pooling layer here
-                if self.add_second_conv_layer:
-                    pass
-
+            
         # Combine all the pooled features
         num_filters_total = num_filters * len(filter_sizes)
         self.h_pool = tf.concat(3, pooled_outputs)

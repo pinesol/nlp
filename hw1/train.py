@@ -29,7 +29,7 @@ tf.flags.DEFINE_boolean("log_device_placement", False, "Log placement of ops on 
 
 tf.flags.DEFINE_boolean("test", False, "If true, the model is run on a much smaller dataset. Overrides some flags.")
 tf.flags.DEFINE_string("exp_name", 'exp', "The name of the experiment. Made into a directory to store similar runs.")
-tf.flags.DEFINE_boolean(add_second_conv_layer, False, "If true, add a second layer of convolution and pooling.")
+tf.flags.DEFINE_boolean("add_second_conv_layer", False, "If true, add a second layer of convolution and pooling.")
 
 FLAGS = tf.flags.FLAGS
 FLAGS._parse_flags()
