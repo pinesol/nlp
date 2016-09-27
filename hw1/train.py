@@ -15,12 +15,13 @@ from tensorflow.contrib import learn
 tf.flags.DEFINE_integer("embedding_dim", 64, "Dimensionality of character embedding (default: 64)") # TODO try 128, the orig
 tf.flags.DEFINE_string("filter_sizes", "3,4,5", "Comma-separated filter sizes (default: '3,4,5')")
 tf.flags.DEFINE_integer("num_filters", 64, "Number of filters per filter size (default: 64)") # TODO try 128, the orig
-tf.flags.DEFINE_float("l2_reg_lambda", 0.0, "L2 regularizaion lambda (default: 0.0)")
+tf.flags.DEFINE_float("l2_reg_lambda", 0.0, "L2 regularization lambda (default: 0.0)")
 tf.flags.DEFINE_float("dropout_keep_prob", 0.5, "Dropout probability (default: 0.5)")
+tf.flags.DEFINE_float("learning_rate", 1e-3, "Initial learning rate. Defaults to 0.001")
 
 # Training parameters
 tf.flags.DEFINE_integer("batch_size", 32, "Batch Size (default: 64)")
-tf.flags.DEFINE_integer("num_epochs", 50, "Number of training epochs (default: 50)") # TODO try orig: 500
+tf.flags.DEFINE_integer("num_epochs", 8, "Number of training epochs (default: 8)")
 tf.flags.DEFINE_integer("evaluate_every", 200, "Evaluate model on dev set after this many steps (default: 200)")
 tf.flags.DEFINE_integer("checkpoint_every", 1000, "Save model after this many steps (default: 1000)")
 # Misc Parameters
@@ -98,7 +99,7 @@ with tf.Graph().as_default(): # TODO tf Graph.as_default?
 
         # Define Training procedure
         global_step = tf.Variable(0, name="global_step", trainable=False)
-        optimizer = tf.train.AdamOptimizer(1e-3)
+        optimizer = tf.train.AdamOptimizer(FLAGS.learning_rate)
         grads_and_vars = optimizer.compute_gradients(cnn.loss)
         train_op = optimizer.apply_gradients(grads_and_vars, global_step=global_step)
 
@@ -158,8 +159,7 @@ with tf.Graph().as_default(): # TODO tf Graph.as_default?
                 feed_dict)
             time_str = datetime.datetime.now().isoformat()
             print("{}: step {}, loss {:g}, acc {:g}".format(time_str, step, loss, accuracy))
-            if step % 20 == 0:
-                train_summary_writer.add_summary(summaries, step)
+            train_summary_writer.add_summary(summaries, step)
 
         def dev_step(x_batch, y_batch):
             """
@@ -181,9 +181,10 @@ with tf.Graph().as_default(): # TODO tf Graph.as_default?
         # Generate batches
         batches = data_helpers.batch_iter(
             list(zip(x_train, y_train)), FLAGS.batch_size, FLAGS.num_epochs)
+
         current_step = None
         # Training loop. For each batch...
-        for batch in batches: # TODO what are the batch objects?
+        for batch in batches:
             x_batch, y_batch = zip(*batch)
             train_step(x_batch, y_batch)
             current_step = tf.train.global_step(sess, global_step)
@@ -201,7 +202,7 @@ with tf.Graph().as_default(): # TODO tf Graph.as_default?
         if current_step % FLAGS.checkpoint_every != 0:
             path = saver.save(sess, checkpoint_prefix, global_step=current_step)
             print("Saved model checkpoint to {}\n".format(path))
-        train_summary_writer.close()
-        dev_summary_writer.close()
+        train_summary_writer.flush()
+        dev_summary_writer.flush()
 
             
