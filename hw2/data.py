@@ -6,8 +6,10 @@ import os
 import pickle
 import random
 import re
+import sklearn.cross_validation as cv
 
 PICKLE_FILE = 'data.p'
+VALIDATION_PROPORTION = 0.2
 
 def _load_reviews(review_dir):
     print('Loading reviews from "{}"'.format(review_dir))
@@ -27,7 +29,7 @@ def _load_reviews(review_dir):
 def load(use_pickle=True):
     if use_pickle and os.path.isfile(PICKLE_FILE):
         print('Loading reviews from pickle file "{}"'.format(PICKLE_FILE))
-        shuffled_reviews, shuffled_labels = pickle.load(open(PICKLE_FILE, 'r'))
+        reviews_train, reviews_val, labels_train, labels_val = pickle.load(open(PICKLE_FILE, 'r'))
     else:
         print('Loading from scratch...'.format(PICKLE_FILE))
         
@@ -51,8 +53,13 @@ def load(use_pickle=True):
         random.shuffle(zipped_reviews)
         shuffled_reviews, shuffled_labels = zip(*zipped_reviews)
 
-        print('Saving loaded data to file "{}"'.format(PICKLE_FILE))
-        pickle.dump((shuffled_reviews, shuffled_labels), open(PICKLE_FILE, 'w'))
+        reviews_train, reviews_val, labels_train, labels_val = cv.train_test_split(
+            shuffled_reviews, shuffled_labels, test_size=VALIDATION_PROPORTION)
         
-        print('Loaded {} data-labels pairs'.format(len(reviews)))
-    return shuffled_reviews, shuffled_labels
+        print('Saving loaded data to file "{}"'.format(PICKLE_FILE))
+        pickle.dump((reviews_train, reviews_val, labels_train, labels_val),
+                    open(PICKLE_FILE, 'w'))
+        
+        print('Loaded {} training data points, {} validation data points'.format(
+            len(reviews_train), len(reviews_val)))
+    return reviews_train, reviews_val, labels_train, labels_val
