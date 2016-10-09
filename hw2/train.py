@@ -7,13 +7,15 @@ import tensorflow as tf
 from tensorflow.contrib import learn
 import time
 
+import data
+import cbow
+
+# Program infra flags
 tf.flags.DEFINE_string("exp_name",
                        datetime.datetime.now().strftime('%Y%m%d%H%M%S'),
                        "The name of the experiment. Defaults to timestamp") 
 tf.flags.DEFINE_string("use_pickle", True, "If set, data is loaded from a precomputed file.")
-# TODO use this
 tf.flags.DEFINE_boolean("test", False, "If true, the model is run on a much smaller dataset. Overrides some flags.")
-
 
 # Model Hyperparameters
 tf.flags.DEFINE_integer("embedding_dim", 64, "Dimensionality of character embedding (default: 64)") # TODO try 128, the orig
@@ -28,21 +30,27 @@ tf.flags.DEFINE_integer("evaluate_every", 200, "Evaluate model on val set after 
 tf.flags.DEFINE_integer("checkpoint_every", 1000, "Save model after this many steps (default: 1000)")
 
 
-tf.flags.DEFINE_string("exp_name", 'exp', "The name of the experiment. Made into a directory to store similar runs.")
-tf.flags.DEFINE_boolean("add_second_conv_layer", False, "If true, add a second layer of convolution and pooling.")
-
-
 FLAGS = tf.flags.FLAGS
 FLAGS._parse_flags()
 print("\nParameters:")
 for attr, value in sorted(FLAGS.__flags.items()):
     print("{}={}".format(attr.upper(), value))
     print("")
-    
-vocab, reviews, labels = data.load(use_pickle=FLAGS.use_pickle)
-vocab_id_reviews = data.make_vocab_id_reviews(vocab, reviews)
 
+if FLAGS.test:
+    TEST_DATA_LEN = 1000
+    print('Testing mode is on, only using the first {} data points'.format(TEST_DATA_LEN))
+    TEST_NUM_EPOCHS = 10
+    print('Testing mode is on: only doing {} epochs'.format(TEST_NUM_EPOCHS))
+    FLAGS.num_epochs = TEST_NUM_EPOCHS
+    FLAGS.exp_name = 'test'
+    vocab, reviews, labels = data.load(use_pickle=FLAGS.use_pickle, max_reviews=TEST_DATA_LEN)
+else:
+    vocab, reviews, labels = data.load(use_pickle=FLAGS.use_pickle)
+    
+vocab_id_reviews = data.make_vocab_id_reviews(vocab, reviews)
 x_train, x_val, y_train, y_val = data.shuffle_split_data(vocab_id_reviews, labels)
+
 
 
 # Training
@@ -52,12 +60,10 @@ with tf.Graph().as_default(): # TODO tf Graph.as_default?
         allow_soft_placement=True, log_device_placement=False)
     sess = tf.Session(config=session_conf)
     with sess.as_default():
-        # TODO change this
-        cbow = CBOW(sequence_length=x_train.shape[1],
-                    num_classes=2,
-                    vocab_size=len(vocab),
-                    embedding_size=FLAGS.embedding_dim)
-        
+        cbow = cbow.CBOW(sequence_length=x_train.shape[1],
+                         num_classes=2,
+                         vocab_size=len(vocab),
+                         embedding_size=FLAGS.embedding_dim)
         # Define Training procedure
         global_step = tf.Variable(0, name="global_step", trainable=False)
         optimizer = tf.train.AdamOptimizer(FLAGS.learning_rate)
@@ -99,9 +105,6 @@ with tf.Graph().as_default(): # TODO tf Graph.as_default?
         if not os.path.exists(checkpoint_dir):
             os.makedirs(checkpoint_dir)
         saver = tf.train.Saver(tf.all_variables())
-
-        # Write vocabulary
-        vocab_processor.save(os.path.join(out_dir, "vocab"))
 
         # Initialize all variables
         sess.run(tf.initialize_all_variables())

@@ -4,17 +4,18 @@ import collections
 import numpy as np
 import os
 import pickle
-import random
 import re
 import sklearn.cross_validation as cv
 
 PICKLE_FILE = 'data.p'
 OUT_OF_VOCAB = '<oov>'
 
-def _load_reviews(review_dir):
+def _load_reviews(review_dir, max_reviews=None):
     print('Loading reviews from "{}"'.format(review_dir))
     reviews = []    
     for filename in os.listdir(review_dir):
+        if max_reviews and len(reviews) > max_reviews:
+            break
         with open(os.path.join(review_dir, filename)) as f:
             # NOTE: leaving in punctuation (periods, commas, etc).
             review_text = f.read().replace('<br />', '\n')  # Replace HTML breaks with newline chars.
@@ -32,15 +33,16 @@ def _load_reviews(review_dir):
 # Punctuation is left in.
 # positive label = [0,1]
 # negative label = [1,0]
-def load(use_pickle=True):
-    if use_pickle and os.path.isfile(PICKLE_FILE):
-        print('Loading reviews from pickle file "{}"'.format(PICKLE_FILE))
-        vocab, reviews, labels = pickle.load(open(PICKLE_FILE, 'r'))
+def load(use_pickle=True, max_reviews=None):
+    pickle_filename = PICKLE_FILE if not max_reviews else '{}_{}'.format(max_reviews, PICKLE_FILE)
+    if use_pickle and os.path.isfile(pickle_filename):
+        print('Loading reviews from pickle file "{}"'.format(pickle_filename))
+        vocab, reviews, labels = pickle.load(open(pickle_filename, 'r'))
     else:
-        print('Loading from scratch...'.format(PICKLE_FILE))
+        print('Loading from scratch...'.format(pickle_filename))
         
-        positive_reviews = _load_reviews('aclImdb/train/pos/')
-        negative_reviews = _load_reviews('aclImdb/train/neg/')
+        positive_reviews = _load_reviews('aclImdb/train/pos/', max_reviews)
+        negative_reviews = _load_reviews('aclImdb/train/neg/', max_reviews)
         reviews = positive_reviews + negative_reviews
 
         # TODO Don't know why the labels are done like this, but that's what HW1 does...
@@ -62,36 +64,33 @@ def load(use_pickle=True):
         # the end of the review has already been passed.
         vocab = {word:(i+1) for i, word in enumerate(sorted(vocab))}
 
-        print('Saving loaded data to file "{}"'.format(PICKLE_FILE))
-        pickle.dump((vocab, reviews, labels), open(PICKLE_FILE, 'w'))
+        print('Saving loaded data to file "{}"'.format(pickle_filename))
+        pickle.dump((vocab, reviews, labels), open(pickle_filename, 'w'))
 
         print('Loaded {} data points'.format(len(reviews)))
-        return vocab, reviews, labels    
+    return vocab, reviews, labels    
 
 
-# Coverts the reviews list into a list of vocab IDs.
+# Coverts the reviews list into a 2D numpy array of vocab IDs.
 # Each vocab_id review is padded with zeros to the length of the longest review.
 def make_vocab_id_reviews(vocab, reviews):
     max_length = max([len(review) for review in reviews])
-    vocab_id_reviews = []
-    for review in reviews:
-        vocab_ids = np.zeros(max_length, np.int64)
-        for i, word in enumerate(review):
-            vocab_ids[i] = vocab.get(word)
-        vocab_id_reviews.append(vocab_ids)
+    vocab_id_reviews = np.zeros((len(reviews), max_length), dtype=np.int64)
+    for i, review in enumerate(reviews):
+        for j, word in enumerate(review):
+            vocab_id_reviews[i][j] = vocab.get(word)
     return vocab_id_reviews
 
     
 # returns reviews_train, reviews_val, labels_train, labels_val
 def shuffle_split_data(reviews, labels, val_size=0.2, seed=1):
     if seed:
-        random.seed(seed)
-    # Shuffle the reviews
-    zipped_reviews = zip(reviews, labels)
-    random.shuffle(zipped_reviews)
-    shuffled_reviews, shuffled_labels = zip(*zipped_reviews)
+        np.random.seed(seed)
+    shuffle_indices = np.random.permutation(np.arange(len(reviews)))
+    reviews = reviews[shuffle_indices]
+    labels = labels[shuffle_indices]
     reviews_train, reviews_val, labels_train, labels_val = cv.train_test_split(
-        shuffled_reviews, shuffled_labels, test_size=val_size)
+        reviews, labels, test_size=val_size)
     print('Split {} training data points, {} validation data points'.format(
         len(reviews_train), len(reviews_val)))
     return reviews_train, reviews_val, labels_train, labels_val
