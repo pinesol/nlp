@@ -26,8 +26,9 @@ def _load_reviews(review_dir):
             reviews.append(review)
     return reviews
 
-# Returns vocab set, unshuffled reviews and labels lists.
+# Returns vocab map, unshuffled reviews and labels lists.
 # Words not in the 10K words are replaced with "<oov>".
+# The vocab map is indexed from one, zero indicates EOD.
 # Punctuation is left in.
 # positive label = [0,1]
 # negative label = [1,0]
@@ -53,7 +54,13 @@ def load(use_pickle=True):
         vocab = set([pair[0] for pair in word_counts.most_common(10000)])
         reviews = [[word if word in vocab else OUT_OF_VOCAB for word in review]
                    for review in reviews]
+        # Add the OUT_OF_VOCAB symbol to the vocabulary.
         vocab.add(OUT_OF_VOCAB)
+
+        # Make vocab into a word, index dictionary.
+        # Indexing the words from one so that a value of zero indicates
+        # the end of the review has already been passed.
+        vocab = {word:(i+1) for i, word in enumerate(sorted(vocab))}
 
         print('Saving loaded data to file "{}"'.format(PICKLE_FILE))
         pickle.dump((vocab, reviews, labels), open(PICKLE_FILE, 'w'))
@@ -62,6 +69,19 @@ def load(use_pickle=True):
         return vocab, reviews, labels    
 
 
+# Coverts the reviews list into a list of vocab IDs.
+# Each vocab_id review is padded with zeros to the length of the longest review.
+def make_vocab_id_reviews(vocab, reviews):
+    max_length = max([len(review) for review in reviews])
+    vocab_id_reviews = []
+    for review in reviews:
+        vocab_ids = np.zeros(max_length, np.int64)
+        for i, word in enumerate(review):
+            vocab_ids[i] = vocab.get(word)
+        vocab_id_reviews.append(vocab_ids)
+    return vocab_id_reviews
+
+    
 # returns reviews_train, reviews_val, labels_train, labels_val
 def shuffle_split_data(reviews, labels, val_size=0.2, seed=1):
     if seed:

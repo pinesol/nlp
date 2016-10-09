@@ -18,13 +18,13 @@ tf.flags.DEFINE_boolean("test", False, "If true, the model is run on a much smal
 # Model Hyperparameters
 tf.flags.DEFINE_integer("embedding_dim", 64, "Dimensionality of character embedding (default: 64)") # TODO try 128, the orig
 tf.flags.DEFINE_float("l2_reg_lambda", 0.0, "L2 regularization lambda (default: 0.0)")
-tf.flags.DEFINE_float("dropout_keep_prob", 0.5, "Dropout probability (default: 0.5)")
+#TODOtf.flags.DEFINE_float("dropout_keep_prob", 0.5, "Dropout probability (default: 0.5)")
 tf.flags.DEFINE_float("learning_rate", 1e-3, "Initial learning rate. Defaults to 0.001")
 
 # Training parameters
 tf.flags.DEFINE_integer("batch_size", 32, "Batch Size (default: 64)")
 tf.flags.DEFINE_integer("num_epochs", 8, "Number of training epochs (default: 8)")
-tf.flags.DEFINE_integer("evaluate_every", 200, "Evaluate model on dev set after this many steps (default: 200)")
+tf.flags.DEFINE_integer("evaluate_every", 200, "Evaluate model on val set after this many steps (default: 200)")
 tf.flags.DEFINE_integer("checkpoint_every", 1000, "Save model after this many steps (default: 1000)")
 
 
@@ -39,7 +39,11 @@ for attr, value in sorted(FLAGS.__flags.items()):
     print("{}={}".format(attr.upper(), value))
     print("")
     
-reviews_train, reviews_val, labels_train, labels_val = data.load(use_pickle=FLAGS.use_pickle)
+vocab, reviews, labels = data.load(use_pickle=FLAGS.use_pickle)
+vocab_id_reviews = data.make_vocab_id_reviews(vocab, reviews)
+
+x_train, x_val, y_train, y_val = data.shuffle_split_data(vocab_id_reviews, labels)
+
 
 # Training
 # ==================================================
@@ -49,20 +53,15 @@ with tf.Graph().as_default(): # TODO tf Graph.as_default?
     sess = tf.Session(config=session_conf)
     with sess.as_default():
         # TODO change this
-        cnn = TextCNN(
-            sequence_length=x_train.shape[1],
-            num_classes=2,
-            vocab_size=len(vocab_processor.vocabulary_),
-            embedding_size=FLAGS.embedding_dim,
-            filter_sizes=list(map(int, FLAGS.filter_sizes.split(","))),
-            num_filters=FLAGS.num_filters,
-            l2_reg_lambda=FLAGS.l2_reg_lambda,
-            add_second_conv_layer=FLAGS.add_second_conv_layer)
-
+        cbow = CBOW(sequence_length=x_train.shape[1],
+                    num_classes=2,
+                    vocab_size=len(vocab),
+                    embedding_size=FLAGS.embedding_dim)
+        
         # Define Training procedure
         global_step = tf.Variable(0, name="global_step", trainable=False)
         optimizer = tf.train.AdamOptimizer(FLAGS.learning_rate)
-        grads_and_vars = optimizer.compute_gradients(cnn.loss)
+        grads_and_vars = optimizer.compute_gradients(cbow.loss)
         train_op = optimizer.apply_gradients(grads_and_vars, global_step=global_step)
 
         # Keep track of gradient values and sparsity (optional)
@@ -81,18 +80,18 @@ with tf.Graph().as_default(): # TODO tf Graph.as_default?
         print("Writing to {}\n".format(out_dir))
 
         # Summaries for loss and accuracy
-        loss_summary = tf.scalar_summary("loss", cnn.loss)
-        acc_summary = tf.scalar_summary("accuracy", cnn.accuracy)
+        loss_summary = tf.scalar_summary("loss", cbow.loss)
+        acc_summary = tf.scalar_summary("accuracy", cbow.accuracy)
 
         # Train Summaries
         train_summary_op = tf.merge_summary([loss_summary, acc_summary, grad_summaries_merged])
         train_summary_dir = os.path.join(out_dir, "summaries", "train")
         train_summary_writer = tf.train.SummaryWriter(train_summary_dir, sess.graph)
 
-        # Dev summaries
-        dev_summary_op = tf.merge_summary([loss_summary, acc_summary])
-        dev_summary_dir = os.path.join(out_dir, "summaries", "dev")
-        dev_summary_writer = tf.train.SummaryWriter(dev_summary_dir, sess.graph)
+        # Val summaries
+        val_summary_op = tf.merge_summary([loss_summary, acc_summary])
+        val_summary_dir = os.path.join(out_dir, "summaries", "val")
+        val_summary_writer = tf.train.SummaryWriter(val_summary_dir, sess.graph)
 
         # Checkpoint directory. Tensorflow assumes this directory already exists so we need to create it
         checkpoint_dir = os.path.abspath(os.path.join(out_dir, "checkpoints"))
@@ -112,37 +111,35 @@ with tf.Graph().as_default(): # TODO tf Graph.as_default?
             A single training step
             """
             feed_dict = {
-              cnn.input_x: x_batch,
-              cnn.input_y: y_batch,
-              cnn.dropout_keep_prob: FLAGS.dropout_keep_prob
+              cbow.input_x: x_batch,
+              cbow.input_y: y_batch,
+#TODO              cbow.dropout_keep_prob: FLAGS.dropout_keep_prob
             }
             _, step, summaries, loss, accuracy = sess.run(
-                [train_op, global_step, train_summary_op, cnn.loss, cnn.accuracy],
+                [train_op, global_step, train_summary_op, cbow.loss, cbow.accuracy],
                 feed_dict)
             time_str = datetime.datetime.now().isoformat()
             print("{}: step {}, loss {:g}, acc {:g}".format(time_str, step, loss, accuracy))
             train_summary_writer.add_summary(summaries, step)
 
-        def dev_step(x_batch, y_batch):
+        def val_step(x_batch, y_batch):
             """
-            Evaluates model on a dev set
+            Evaluates model on a val set
             """
             feed_dict = {
-              cnn.input_x: x_batch,
-              cnn.input_y: y_batch,
-              cnn.dropout_keep_prob: 1  # don't do dropout on validation
+              cbow.input_x: x_batch,
+              cbow.input_y: y_batch,
+#TODO              cbow.dropout_keep_prob: 1  # don't do dropout on validation
             }
             step, summaries, loss, accuracy = sess.run(
-                [global_step, dev_summary_op, cnn.loss, cnn.accuracy],
+                [global_step, val_summary_op, cbow.loss, cbow.accuracy],
                 feed_dict)
             time_str = datetime.datetime.now().isoformat()
             print("{}: step {}, loss {:g}, acc {:g}".format(time_str, step, loss, accuracy))
-            dev_summary_writer.add_summary(summaries, step)
-
+            val_summary_writer.add_summary(summaries, step)
             
         # Generate batches
-        batches = data_helpers.batch_iter(
-            list(zip(x_train, y_train)), FLAGS.batch_size, FLAGS.num_epochs)
+        batches = data.batch_iter(list(zip(x_train, y_train)), FLAGS.batch_size, FLAGS.num_epochs)
 
         current_step = None
         # Training loop. For each batch...
@@ -152,7 +149,7 @@ with tf.Graph().as_default(): # TODO tf Graph.as_default?
             current_step = tf.train.global_step(sess, global_step)
             if current_step % FLAGS.evaluate_every == 0:
                 print("\nEvaluation:")
-                dev_step(x_dev, y_dev)
+                val_step(x_val, y_val)
                 print("")
             if current_step % FLAGS.checkpoint_every == 0:
                 path = saver.save(sess, checkpoint_prefix, global_step=current_step)
@@ -160,13 +157,12 @@ with tf.Graph().as_default(): # TODO tf Graph.as_default?
         # Eval and checkpoint if it wasn't done on the last step
         if current_step % FLAGS.evaluate_every != 0:
             print("\nEvaluation:")
-            dev_step(x_dev, y_dev)
+            val_step(x_val, y_val)
         if current_step % FLAGS.checkpoint_every != 0:
             path = saver.save(sess, checkpoint_prefix, global_step=current_step)
             print("Saved model checkpoint to {}\n".format(path))
         train_summary_writer.flush()
-        dev_summary_writer.flush()
-
+        val_summary_writer.flush()
     
 
 if __name__ == '__main__':
