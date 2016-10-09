@@ -9,7 +9,7 @@ import re
 import sklearn.cross_validation as cv
 
 PICKLE_FILE = 'data.p'
-VALIDATION_PROPORTION = 0.2
+OUT_OF_VOCAB = '<oov>'
 
 def _load_reviews(review_dir):
     print('Loading reviews from "{}"'.format(review_dir))
@@ -26,10 +26,15 @@ def _load_reviews(review_dir):
             reviews.append(review)
     return reviews
 
+# Returns vocab set, unshuffled reviews and labels lists.
+# Words not in the 10K words are replaced with "<oov>".
+# Punctuation is left in.
+# positive label = [0,1]
+# negative label = [1,0]
 def load(use_pickle=True):
     if use_pickle and os.path.isfile(PICKLE_FILE):
         print('Loading reviews from pickle file "{}"'.format(PICKLE_FILE))
-        reviews_train, reviews_val, labels_train, labels_val = pickle.load(open(PICKLE_FILE, 'r'))
+        vocab, reviews, labels = pickle.load(open(PICKLE_FILE, 'r'))
     else:
         print('Loading from scratch...'.format(PICKLE_FILE))
         
@@ -42,28 +47,36 @@ def load(use_pickle=True):
         negative_labels = [[1, 0] for _ in negative_reviews]
         labels = np.concatenate([positive_labels, negative_labels], 0)    
         
-        # Filter out all words but the top 10k
+        # Replace all words that aren't in the top 10k with <oov>.
         print('Filtering out top 10k words')
         word_counts = collections.Counter([word for review in reviews for word in review])
-        top_words = set([pair[0] for pair in word_counts.most_common(10000)])
-        reviews = [set(review).intersection(top_words) for review in reviews]
+        vocab = set([pair[0] for pair in word_counts.most_common(10000)])
+        reviews = [[word if word in vocab else OUT_OF_VOCAB for word in review]
+                   for review in reviews]
+        vocab.add(OUT_OF_VOCAB)
 
-        # Shuffle the reviews
-        zipped_reviews = zip(reviews, labels)
-        random.shuffle(zipped_reviews)
-        shuffled_reviews, shuffled_labels = zip(*zipped_reviews)
-
-        reviews_train, reviews_val, labels_train, labels_val = cv.train_test_split(
-            shuffled_reviews, shuffled_labels, test_size=VALIDATION_PROPORTION)
-        
         print('Saving loaded data to file "{}"'.format(PICKLE_FILE))
-        pickle.dump((reviews_train, reviews_val, labels_train, labels_val),
-                    open(PICKLE_FILE, 'w'))
-        
-        print('Loaded {} training data points, {} validation data points'.format(
-            len(reviews_train), len(reviews_val)))
+        pickle.dump((vocab, reviews, labels), open(PICKLE_FILE, 'w'))
+
+        print('Loaded {} data points'.format(len(reviews)))
+        return vocab, reviews, labels    
+
+
+# returns reviews_train, reviews_val, labels_train, labels_val
+def shuffle_split_data(reviews, labels, val_size=0.2, seed=1):
+    if seed:
+        random.seed(seed)
+    # Shuffle the reviews
+    zipped_reviews = zip(reviews, labels)
+    random.shuffle(zipped_reviews)
+    shuffled_reviews, shuffled_labels = zip(*zipped_reviews)
+    reviews_train, reviews_val, labels_train, labels_val = cv.train_test_split(
+        shuffled_reviews, shuffled_labels, test_size=val_size)
+    print('Split {} training data points, {} validation data points'.format(
+        len(reviews_train), len(reviews_val)))
     return reviews_train, reviews_val, labels_train, labels_val
 
+    
 # Taken from
 # https://github.com/dennybritz/cnn-text-classification-tf/blob/master/data_helpers.py
 def batch_iter(data, batch_size, num_epochs):
