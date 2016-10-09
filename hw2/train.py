@@ -52,17 +52,16 @@ vocab_id_reviews = data.make_vocab_id_reviews(vocab, reviews)
 x_train, x_val, y_train, y_val = data.shuffle_split_data(vocab_id_reviews, labels)
 
 
-
 # Training
 # ==================================================
-with tf.Graph().as_default(): # TODO tf Graph.as_default?
+with tf.Graph().as_default():
     session_conf = tf.ConfigProto(
         allow_soft_placement=True, log_device_placement=False)
     sess = tf.Session(config=session_conf)
     with sess.as_default():
         cbow = cbow.CBOW(sequence_length=x_train.shape[1],
                          num_classes=2,
-                         vocab_size=len(vocab),
+                         vocab_size=len(vocab) + 1, # +1 is for the padding word (0).
                          embedding_size=FLAGS.embedding_dim)
         # Define Training procedure
         global_step = tf.Variable(0, name="global_step", trainable=False)
