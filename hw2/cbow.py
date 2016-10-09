@@ -9,7 +9,7 @@ import numpy as np
 
 class CBOW(object):
     # TODO add dropout?
-    def __init__(sequence_length, num_classes, vocab_size, embedding_size):
+    def __init__(self, sequence_length, num_classes, vocab_size, embedding_size):
         self.input_x = tf.placeholder(tf.int32, [None, sequence_length], name="input_x")
         self.input_y = tf.placeholder(tf.float32, [None, num_classes], name="input_y")
         
@@ -22,10 +22,12 @@ class CBOW(object):
                 name="E")
             embeddings = tf.nn.embedding_lookup(E, self.input_x)
             # This adds another dimension at the end
-            # TODO why?
-            embeddings_expanded = tf.expand_dims(self.embeddings, -1)
+            # TODO why did text_cnn do this? i'm not doing it
+#            embeddings_expanded = tf.expand_dims(embeddings), -1)
 
-        mean_embedding = tf.reduce_mean(embeddings_expanded, 0, name="mean")
+        with tf.name_scope("hidden"):
+            #_expanded TODO
+            mean_embedding = tf.reduce_mean(embeddings, 1, name="mean")
     
         with tf.name_scope("output"):
             W = tf.get_variable(
@@ -33,7 +35,7 @@ class CBOW(object):
                 shape=[embedding_size, num_classes],
                 initializer=tf.contrib.layers.xavier_initializer()) # TODO what is this xavier initializer?
             b = tf.Variable(tf.constant(0.1, shape=[num_classes]), name="b")
-            self.scores = tf.nn.xw_plus_b(self.h_pool_flat, W, b, name="scores")
+            self.scores = tf.nn.xw_plus_b(mean_embedding, W, b, name="scores")
             self.predictions = tf.argmax(self.scores, 1, name="predictions")
 
         # CalculateMean cross-entropy loss
