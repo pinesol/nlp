@@ -8,9 +8,8 @@ import numpy as np
 
 
 class CBOW(object):
-    def __init__(sequence_length, vocab_size, embedding_size):
-        num_classes = 2
-        # Placeholders for input, output and dropout (which you need to implement!!!!)
+    # TODO add dropout?
+    def __init__(sequence_length, num_classes, vocab_size, embedding_size):
         self.input_x = tf.placeholder(tf.int32, [None, sequence_length], name="input_x")
         self.input_y = tf.placeholder(tf.float32, [None, num_classes], name="input_y")
         
