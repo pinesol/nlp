@@ -40,7 +40,7 @@ for attr, value in sorted(FLAGS.__flags.items()):
 if FLAGS.test:
     TEST_DATA_LEN = 1000
     print('Testing mode is on, only using the first {} data points'.format(TEST_DATA_LEN))
-    TEST_NUM_EPOCHS = 10
+    TEST_NUM_EPOCHS = 1
     print('Testing mode is on: only doing {} epochs'.format(TEST_NUM_EPOCHS))
     FLAGS.num_epochs = TEST_NUM_EPOCHS
     FLAGS.exp_name = 'test'
@@ -165,7 +165,3 @@ with tf.Graph().as_default():
             print("Saved model checkpoint to {}\n".format(path))
         train_summary_writer.flush()
         val_summary_writer.flush()
-    
-
-if __name__ == '__main__':
-  tf.app.run()
