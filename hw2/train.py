@@ -18,15 +18,14 @@ tf.flags.DEFINE_string("use_pickle", True, "If set, data is loaded from a precom
 tf.flags.DEFINE_boolean("test", False, "If true, the model is run on a much smaller dataset. Overrides some flags.")
 
 # Model Hyperparameters
-tf.flags.DEFINE_integer("embedding_dim", 64, "Dimensionality of character embedding (default: 64)") # TODO try 128, the orig
-tf.flags.DEFINE_float("l2_reg_lambda", 0.0, "L2 regularization lambda (default: 0.0)")
-#TODOtf.flags.DEFINE_float("dropout_keep_prob", 0.5, "Dropout probability (default: 0.5)")
+tf.flags.DEFINE_integer("embedding_dim", 64, "Dimensionality of character embedding (default: 64)")
+tf.flags.DEFINE_float("dropout_keep_prob", 0.5, "Dropout probability (default: 0.5)")
 tf.flags.DEFINE_float("learning_rate", 1e-3, "Initial learning rate. Defaults to 0.001")
 
 # Training parameters
 tf.flags.DEFINE_integer("batch_size", 32, "Batch Size (default: 64)")
 tf.flags.DEFINE_integer("num_epochs", 8, "Number of training epochs (default: 8)")
-tf.flags.DEFINE_integer("evaluate_every", 200, "Evaluate model on val set after this many steps (default: 200)")
+tf.flags.DEFINE_integer("evaluate_every", 200, "Evaluate model on val set after this many steps (default: 200)") # TODO try evaling every step
 tf.flags.DEFINE_integer("checkpoint_every", 1000, "Save model after this many steps (default: 1000)")
 
 
@@ -115,7 +114,7 @@ with tf.Graph().as_default():
             feed_dict = {
               cbow.input_x: x_batch,
               cbow.input_y: y_batch,
-#TODO              cbow.dropout_keep_prob: FLAGS.dropout_keep_prob
+              cbow.dropout_keep_prob: FLAGS.dropout_keep_prob
             }
             _, step, summaries, loss, accuracy = sess.run(
                 [train_op, global_step, train_summary_op, cbow.loss, cbow.accuracy],
@@ -131,7 +130,7 @@ with tf.Graph().as_default():
             feed_dict = {
               cbow.input_x: x_batch,
               cbow.input_y: y_batch,
-#TODO              cbow.dropout_keep_prob: 1  # don't do dropout on validation
+              cbow.dropout_keep_prob: 1  # don't do dropout on validation
             }
             step, summaries, loss, accuracy = sess.run(
                 [global_step, val_summary_op, cbow.loss, cbow.accuracy],
@@ -146,7 +145,10 @@ with tf.Graph().as_default():
         current_step = None
         # Training loop. For each batch...
         for batch in batches:
-            x_batch, y_batch = zip(*batch)
+            if len(batch) == 0: # TODO I hope the existence of zero-sized batches isn't a bug...
+                print 'empty batch, skipping...' # TODO it stopped here? why? or was it done as step 5000?
+                continue
+            x_batch, y_batch = zip(*batch) 
             train_step(x_batch, y_batch)
             current_step = tf.train.global_step(sess, global_step)
             if current_step % FLAGS.evaluate_every == 0:

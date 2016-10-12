@@ -12,6 +12,7 @@ class CBOW(object):
     def __init__(self, sequence_length, num_classes, vocab_size, embedding_size):
         self.input_x = tf.placeholder(tf.int32, [None, sequence_length], name="input_x")
         self.input_y = tf.placeholder(tf.float32, [None, num_classes], name="input_y")
+        self.dropout_keep_prob = tf.placeholder(tf.float32, name="dropout_keep_prob")
         
         # Embedding layer
         # TODO why is this put on the CPU explicitly??
@@ -27,23 +28,27 @@ class CBOW(object):
 
         with tf.name_scope("hidden"):
             #_expanded TODO
+            # TODO consider using 'sum'?
             mean_embedding = tf.reduce_mean(embeddings, 1, name="mean")
-    
+
+        with tf.name_scope("dropout"):
+            h_drop = tf.nn.dropout(mean_embedding, self.dropout_keep_prob)
+            
         with tf.name_scope("output"):
             W = tf.get_variable(
                 "W",
                 shape=[embedding_size, num_classes],
                 initializer=tf.contrib.layers.xavier_initializer()) # TODO what is this xavier initializer?
             b = tf.Variable(tf.constant(0.1, shape=[num_classes]), name="b")
-            self.scores = tf.nn.xw_plus_b(mean_embedding, W, b, name="scores")
-            self.predictions = tf.argmax(self.scores, 1, name="predictions")
+            scores = tf.nn.xw_plus_b(h_drop, W, b, name="scores")
+            predictions = tf.argmax(scores, 1, name="predictions")
 
         # CalculateMean cross-entropy loss
         with tf.name_scope("loss"):
-            losses = tf.nn.softmax_cross_entropy_with_logits(self.scores, self.input_y)
+            losses = tf.nn.softmax_cross_entropy_with_logits(scores, self.input_y)
             self.loss = tf.reduce_mean(losses)
 
         # Accuracy
         with tf.name_scope("accuracy"):
-            correct_predictions = tf.equal(self.predictions, tf.argmax(self.input_y, 1))
+            correct_predictions = tf.equal(predictions, tf.argmax(self.input_y, 1))
             self.accuracy = tf.reduce_mean(tf.cast(correct_predictions, "float"), name="accuracy")
