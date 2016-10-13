@@ -21,6 +21,7 @@ tf.flags.DEFINE_boolean("test", False, "If true, the model is run on a much smal
 tf.flags.DEFINE_integer("embedding_dim", 64, "Dimensionality of character embedding (default: 64)")
 tf.flags.DEFINE_float("dropout_keep_prob", 0.5, "Dropout probability (default: 0.5)")
 tf.flags.DEFINE_float("learning_rate", 1e-3, "Initial learning rate. Defaults to 0.001")
+tf.flags.DEFINE_float("sequence_length", 700, "Maximum sequence length. Defaults to 700.")
 
 # Training parameters
 tf.flags.DEFINE_integer("batch_size", 32, "Batch Size (default: 64)")
@@ -37,15 +38,19 @@ for attr, value in sorted(FLAGS.__flags.items()):
     print("")
 
 if FLAGS.test:
+    FLAGS.sequence_length = 100
     TEST_DATA_LEN = 1000
     print('Testing mode is on, only using the first {} data points'.format(TEST_DATA_LEN))
     TEST_NUM_EPOCHS = 1
     print('Testing mode is on: only doing {} epochs'.format(TEST_NUM_EPOCHS))
     FLAGS.num_epochs = TEST_NUM_EPOCHS
     FLAGS.exp_name = 'test'
-    vocab, reviews, labels = data.load(use_pickle=FLAGS.use_pickle, max_reviews=TEST_DATA_LEN)
+    vocab, reviews, labels = data.load(use_pickle=FLAGS.use_pickle, bigrams=False,
+                                       max_words=FLAGS.sequence_length, max_reviews=TEST_DATA_LEN)
 else:
-    vocab, reviews, labels = data.load(use_pickle=FLAGS.use_pickle)
+    vocab, reviews, labels = data.load(use_pickle=FLAGS.use_pickle, bigrams=False,
+                                       max_words=FLAGS.sequence_length, max_reviews=None)
+    
     
 vocab_id_reviews = data.make_vocab_id_reviews(vocab, reviews)
 x_train, x_val, y_train, y_val = data.shuffle_split_data(vocab_id_reviews, labels)

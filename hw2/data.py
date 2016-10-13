@@ -10,7 +10,7 @@ import sklearn.cross_validation as cv
 PICKLE_FILE = 'data.p'
 OUT_OF_VOCAB = '<oov>'
 
-def _load_reviews(review_dir, max_reviews=None):
+def _load_reviews(review_dir, bigrams=False, max_words=None, max_reviews=None):
     print('Loading reviews from "{}"'.format(review_dir))
     reviews = []    
     for filename in os.listdir(review_dir):
@@ -24,8 +24,26 @@ def _load_reviews(review_dir, max_reviews=None):
             # Leaving in the punctutation that's split on.
             review = filter(None, [word.lower().strip()
                                    for word in re.split("([\(\)\s\.,\-!?:\"]+)", review_text)])
+            if max_words:
+                review = review[:max_words]
+            if bigrams:
+                # TODO
+                pass
             reviews.append(review)
     return reviews
+
+
+def make_pickle_filename(bigrams=False, max_words=None, max_reviews=None):
+    pickle_filename = ''
+    if bigrams:
+        pickle_filename += 'bigram-'
+    if max_words:
+        pickle_filename += 'words' + str(max_words) + '-'
+    if max_reviews:
+        pickle_filename += 'reviews' + str(max_reviews) + '-'
+    pickle_filename += PICKLE_FILE
+    return pickle_filename
+    
 
 # Returns vocab map, unshuffled reviews and labels lists.
 # Words not in the 10K words are replaced with "<oov>".
@@ -33,16 +51,16 @@ def _load_reviews(review_dir, max_reviews=None):
 # Punctuation is left in.
 # positive label = [0,1]
 # negative label = [1,0]
-def load(use_pickle=True, max_reviews=None):
-    pickle_filename = PICKLE_FILE if not max_reviews else '{}_{}'.format(max_reviews, PICKLE_FILE)
+def load(use_pickle=True, bigrams=False, max_words=None, max_reviews=None):
+    pickle_filename = make_pickle_filename(bigrams, max_words, max_reviews)
     if use_pickle and os.path.isfile(pickle_filename):
         print('Loading reviews from pickle file "{}"'.format(pickle_filename))
         vocab, reviews, labels = pickle.load(open(pickle_filename, 'r'))
     else:
         print('Loading from scratch...'.format(pickle_filename))
         
-        positive_reviews = _load_reviews('aclImdb/train/pos/', max_reviews)
-        negative_reviews = _load_reviews('aclImdb/train/neg/', max_reviews)
+        positive_reviews = _load_reviews('aclImdb/train/pos/', bigrams, max_words, max_reviews)
+        negative_reviews = _load_reviews('aclImdb/train/neg/', bigrams, max_words, max_reviews)
         reviews = positive_reviews + negative_reviews
 
         # TODO Don't know why the labels are done like this, but that's what HW1 does...
@@ -98,13 +116,18 @@ def shuffle_split_data(reviews, labels, val_size=0.2, seed=1):
     
 # Taken from
 # https://github.com/dennybritz/cnn-text-classification-tf/blob/master/data_helpers.py
+#Num batches Per Epoch: 626
+#Num total batches: 5008
 def batch_iter(data, batch_size, num_epochs):
     """
     Generates a batch iterator for a dataset.
     """
     data = np.array(data)
     data_size = len(data)
+#    print 'data size', data_size # TODO
     num_batches_per_epoch = int(len(data)/batch_size) + 1
+    print 'Num batches Per Epoch: {}'.format(num_batches_per_epoch)
+    print 'Num total batches: {}'.format(num_batches_per_epoch*num_epochs)
     for epoch in range(num_epochs):
         # Shuffle the data at each epoch
         shuffle_indices = np.random.permutation(np.arange(data_size))
