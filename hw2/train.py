@@ -26,7 +26,7 @@ tf.flags.DEFINE_float("sequence_length", 700, "Maximum sequence length. Defaults
 # Training parameters
 tf.flags.DEFINE_integer("batch_size", 32, "Batch Size (default: 64)")
 tf.flags.DEFINE_integer("num_epochs", 8, "Number of training epochs (default: 8)")
-tf.flags.DEFINE_integer("evaluate_every", 200, "Evaluate model on val set after this many steps (default: 200)") # TODO try evaling every step
+tf.flags.DEFINE_integer("evaluate_every", 50, "Evaluate model on val set after this many steps (default: 200)") # TODO try evaling every step
 tf.flags.DEFINE_integer("checkpoint_every", 1000, "Save model after this many steps (default: 1000)")
 
 
@@ -126,7 +126,8 @@ with tf.Graph().as_default():
                 feed_dict)
             time_str = datetime.datetime.now().isoformat()
             print("{}: step {}, loss {:g}, acc {:g}".format(time_str, step, loss, accuracy))
-            train_summary_writer.add_summary(summaries, step)
+            if step % FLAGS.evaluate_every == 0: # TODO
+                train_summary_writer.add_summary(summaries, step)
 
         def val_step(x_batch, y_batch):
             """
