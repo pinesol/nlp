@@ -25,7 +25,7 @@ tf.flags.DEFINE_float("sequence_length", 700, "Maximum sequence length. Defaults
 
 # Training parameters
 tf.flags.DEFINE_integer("batch_size", 32, "Batch Size (default: 64)")
-tf.flags.DEFINE_integer("num_epochs", 8, "Number of training epochs (default: 8)")
+tf.flags.DEFINE_integer("num_epochs", 15, "Number of training epochs (default: 15)")
 tf.flags.DEFINE_integer("evaluate_every", 50, "Evaluate model on val set after this many steps (default: 200)") # TODO try evaling every step
 tf.flags.DEFINE_integer("checkpoint_every", 1000, "Save model after this many steps (default: 1000)")
 
