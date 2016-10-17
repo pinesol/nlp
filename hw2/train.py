@@ -19,14 +19,14 @@ tf.flags.DEFINE_boolean("test", False, "If true, the model is run on a much smal
 
 # Model Hyperparameters
 tf.flags.DEFINE_integer("embedding_dim", 64, "Dimensionality of character embedding (default: 64)")
-tf.flags.DEFINE_float("dropout_keep_prob", 0.5, "Dropout probability (default: 0.5)")
 tf.flags.DEFINE_float("learning_rate", 1e-3, "Initial learning rate. Defaults to 0.001")
-tf.flags.DEFINE_float("sequence_length", 700, "Maximum sequence length. Defaults to 700.")
+tf.flags.DEFINE_integer("sequence_length", 700, "Maximum sequence length. Defaults to 700.")
+tf.flags.DEFINE_boolean("bigrams", False, "Whether or not to use bigrams")
 
 # Training parameters
-tf.flags.DEFINE_integer("batch_size", 32, "Batch Size (default: 64)")
+tf.flags.DEFINE_integer("batch_size", 32, "Batch Size (default: 32)")
 tf.flags.DEFINE_integer("num_epochs", 15, "Number of training epochs (default: 15)")
-tf.flags.DEFINE_integer("evaluate_every", 50, "Evaluate model on val set after this many steps (default: 200)") # TODO try evaling every step
+tf.flags.DEFINE_integer("evaluate_every", 100, "Evaluate model on val set after this many steps (default: 200)") # TODO try evaling every step
 tf.flags.DEFINE_integer("checkpoint_every", 1000, "Save model after this many steps (default: 1000)")
 
 
@@ -45,10 +45,10 @@ if FLAGS.test:
     print('Testing mode is on: only doing {} epochs'.format(TEST_NUM_EPOCHS))
     FLAGS.num_epochs = TEST_NUM_EPOCHS
     FLAGS.exp_name = 'test'
-    vocab, reviews, labels = data.load(use_pickle=FLAGS.use_pickle, bigrams=False,
+    vocab, reviews, labels = data.load(use_pickle=FLAGS.use_pickle, use_bigrams=FLAGS.bigrams,
                                        max_words=FLAGS.sequence_length, max_reviews=TEST_DATA_LEN)
 else:
-    vocab, reviews, labels = data.load(use_pickle=FLAGS.use_pickle, bigrams=False,
+    vocab, reviews, labels = data.load(use_pickle=FLAGS.use_pickle, use_bigrams=FLAGS.bigrams,
                                        max_words=FLAGS.sequence_length, max_reviews=None)
     
     
@@ -119,14 +119,13 @@ with tf.Graph().as_default():
             feed_dict = {
               cbow.input_x: x_batch,
               cbow.input_y: y_batch,
-              cbow.dropout_keep_prob: FLAGS.dropout_keep_prob
             }
             _, step, summaries, loss, accuracy = sess.run(
                 [train_op, global_step, train_summary_op, cbow.loss, cbow.accuracy],
                 feed_dict)
             time_str = datetime.datetime.now().isoformat()
             print("{}: step {}, loss {:g}, acc {:g}".format(time_str, step, loss, accuracy))
-            if step % FLAGS.evaluate_every == 0: # TODO
+            if step % FLAGS.evaluate_every == 0:
                 train_summary_writer.add_summary(summaries, step)
 
         def val_step(x_batch, y_batch):
@@ -136,7 +135,6 @@ with tf.Graph().as_default():
             feed_dict = {
               cbow.input_x: x_batch,
               cbow.input_y: y_batch,
-              cbow.dropout_keep_prob: 1  # don't do dropout on validation
             }
             step, summaries, loss, accuracy = sess.run(
                 [global_step, val_summary_op, cbow.loss, cbow.accuracy],
