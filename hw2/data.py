@@ -4,6 +4,7 @@ import collections
 import numpy as np
 import os
 import pickle
+import random
 import re
 import sklearn.cross_validation as cv
 
@@ -155,3 +156,46 @@ def batch_iter(data, batch_size, num_epochs):
             start_index = batch_num * batch_size
             end_index = min((batch_num + 1) * batch_size, data_size)
             yield shuffled_data[start_index:end_index]
+
+
+def create_fasttext_data(train_filepath, test_filepath):
+    pos_dir = 'aclImdb/train/pos/'
+    neg_dir = 'aclImdb/train/neg/'
+
+    def create_fasttext_review_list(review_dir, positive):
+        reviews = []
+        for filename in os.listdir(review_dir):
+            with open(os.path.join(review_dir, filename)) as f:
+                review_text = f.read().replace('<br />', ' ').replace('\n', ' ')
+                if positive:
+                    label = '__label__1 , '
+                else:
+                    label = '__label__0 , '
+                reviews.append(label + review_text)
+        return reviews
+
+    print('Reading positive reviews')
+    pos_reviews = create_fasttext_review_list(pos_dir, positive=True)
+    print('Reading negative reviews')
+    neg_reviews = create_fasttext_review_list(neg_dir, positive=False)
+
+    reviews = pos_reviews + neg_reviews
+    random.shuffle(reviews)
+    train_reviews = reviews[:int(0.8*len(reviews))]
+    test_reviews = reviews[len(train_reviews):]
+    
+    train_review_str = '\n'.join(train_reviews)
+    print('Writing train output to {}'.format(train_filepath))
+    with open(train_filepath, 'w') as f:
+        f.write(train_review_str)
+    test_review_str = '\n'.join(test_reviews)
+    print('Writing test output to {}'.format(test_filepath))
+    with open(test_filepath, 'w') as f:
+        f.write(test_review_str)
+
+    
+                    
+
+
+
+                
