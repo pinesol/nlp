@@ -5,6 +5,7 @@ import numpy as np
 import os
 import tensorflow as tf
 from tensorflow.contrib import learn
+import sklearn
 import time
 
 import data
@@ -26,7 +27,7 @@ tf.flags.DEFINE_boolean("bigrams", False, "Whether or not to use bigrams")
 # Training parameters
 tf.flags.DEFINE_integer("batch_size", 32, "Batch Size (default: 32)")
 tf.flags.DEFINE_integer("num_epochs", 15, "Number of training epochs (default: 15)")
-tf.flags.DEFINE_integer("evaluate_every", 100, "Evaluate model on val set after this many steps (default: 200)") # TODO try evaling every step
+tf.flags.DEFINE_integer("evaluate_every", 100, "Evaluate model on val set after this many steps (default: 200)")
 tf.flags.DEFINE_integer("checkpoint_every", 1000, "Save model after this many steps (default: 1000)")
 
 
@@ -108,7 +109,7 @@ with tf.Graph().as_default():
         if not os.path.exists(checkpoint_dir):
             os.makedirs(checkpoint_dir)
         saver = tf.train.Saver(tf.all_variables())
-
+        
         # Initialize all variables
         sess.run(tf.initialize_all_variables())
 
@@ -136,11 +137,18 @@ with tf.Graph().as_default():
               cbow.input_x: x_batch,
               cbow.input_y: y_batch,
             }
-            step, summaries, loss, accuracy = sess.run(
-                [global_step, val_summary_op, cbow.loss, cbow.accuracy],
+            
+            y_labels = np.argmax(y_batch, 1)
+            
+            step, summaries, loss, predictions, accuracy = sess.run(
+                [global_step, val_summary_op, cbow.loss, cbow.predictions, cbow.accuracy],
                 feed_dict)
+                       
             time_str = datetime.datetime.now().isoformat()
             print("{}: step {}, loss {:g}, acc {:g}".format(time_str, step, loss, accuracy))
+            print("Precision {:g}".format(sklearn.metrics.precision_score(y_labels, predictions)))
+            print("Recall {:g}".format(sklearn.metrics.recall_score(y_labels, predictions)))
+
             val_summary_writer.add_summary(summaries, step)
             
         # Generate batches
@@ -149,8 +157,8 @@ with tf.Graph().as_default():
         current_step = None
         # Training loop. For each batch...
         for batch in batches:
-            if len(batch) == 0: # TODO I hope the existence of zero-sized batches isn't a bug...
-                print 'empty batch, skipping...' # TODO it stopped here? why? or was it done as step 5000?
+            if len(batch) == 0:
+                print('empty batch, skipping...')
                 continue
             x_batch, y_batch = zip(*batch) 
             train_step(x_batch, y_batch)

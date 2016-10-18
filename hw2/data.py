@@ -144,7 +144,6 @@ def batch_iter(data, batch_size, num_epochs):
     """
     data = np.array(data)
     data_size = len(data)
-#    print 'data size', data_size # TODO
     num_batches_per_epoch = int(len(data)/batch_size) + 1
     print 'Num batches Per Epoch: {}'.format(num_batches_per_epoch)
     print 'Num total batches: {}'.format(num_batches_per_epoch*num_epochs)
