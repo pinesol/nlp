@@ -1,4 +1,4 @@
-#!/usr/bin/bash
+#!/bin/bash
 
 # first arg can be 'test', 'small', 'medium', 'large'
 
