@@ -319,15 +319,21 @@ class BasicLSTMCell(RNNCell):
       concat = _linear([inputs, h], 4 * self._num_units, True)
 
       # i = input_gate, j = new_input, f = forget_gate, o = output_gate
-      i, j, f, o = array_ops.split(1, 4, concat)
 
-      # TODO Since these are just tensors, and not variables, I don' thinks we have to worry about it backproping through these...
-      if FLAGS.omit_gate == 'i':
-        i = tf.ones(i.get_shape(), tf.float32)
+      if not FLAGS.omit_gate:
+        i, j, f, o = array_ops.split(1, 4, concat)
+      elif FLAGS.omit_gate == 'i':
+        _, j, f, o = array_ops.split(1, 4, concat)
+        i = tf.get_variable('const_i', (20, 2), tf.float32,
+                            initializer=tf.constant_initializer(1.0), trainable=False)
       elif FLAGS.omit_gate == 'f':
-        f = tf.ones(f.get_shape(), tf.float32)
+        i, j, _, o = array_ops.split(1, 4, concat)
+        f = tf.get_variable('const_f', (20, 2), tf.float32,
+                            initializer=tf.constant_initializer(1.0), trainable=False)      
       elif FLAGS.omit_gate == 'o':
-        o = tf.ones(o.get_shape(), tf.float32)        
+        i, j, f, _ = array_ops.split(1, 4, concat)
+        o = tf.get_variable('const_o', (20, 2), tf.float32,
+                            initializer=tf.constant_initializer(1.0), trainable=False)
       
       new_c = (c * sigmoid(f + self._forget_bias) + sigmoid(i) *
                self._activation(j))

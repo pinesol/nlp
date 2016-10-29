@@ -62,6 +62,7 @@ import numpy as np
 import tensorflow as tf
 import rnn_cell
 import reader
+import time
 
 flags = tf.flags
 logging = tf.logging
@@ -75,6 +76,7 @@ flags.DEFINE_string("save_path", None,
                     "Model output directory.")
 flags.DEFINE_bool("use_fp16", False,
                   "Train using 16-bit floats instead of 32bit floats")
+flags.DEFINE_bool("use_gru", False, "If True, GRU is used. Otherwise, LSTM is used")
 
 FLAGS = flags.FLAGS
 
@@ -108,7 +110,10 @@ class PTBModel(object):
     # Slightly better results can be obtained with forget gate biases
     # initialized to 1 but the hyperparameters of the model would need to be
     # different than reported in the paper.
-    lstm_cell = rnn_cell.BasicLSTMCell(size, forget_bias=0.0, state_is_tuple=True)
+    if FLAGS.use_gru:
+      lstm_cell = rnn_cell.GRUCell(size)
+    else:
+      lstm_cell = rnn_cell.BasicLSTMCell(size, forget_bias=0.0, state_is_tuple=True)
     if is_training and config.keep_prob < 1:
       lstm_cell = tf.nn.rnn_cell.DropoutWrapper(
           lstm_cell, output_keep_prob=config.keep_prob)
@@ -117,6 +122,7 @@ class PTBModel(object):
     self._initial_state = cell.zero_state(batch_size, data_type())
 
     with tf.device("/cpu:0"):
+          # TODO add self.
       embedding = tf.get_variable(
           "embedding", [vocab_size, size], dtype=data_type())
       inputs = tf.nn.embedding_lookup(embedding, input_.input_data)
@@ -158,6 +164,8 @@ class PTBModel(object):
 
     self._lr = tf.Variable(0.0, trainable=False)
     tvars = tf.trainable_variables()
+    print('Trainable variables:')
+    print([var.name for var in tvars])
     grads, _ = tf.clip_by_global_norm(tf.gradients(cost, tvars),
                                       config.max_grad_norm)
     optimizer = tf.train.GradientDescentOptimizer(self._lr)
@@ -313,6 +321,11 @@ def main(_):
   if not FLAGS.data_path:
     raise ValueError("Must set --data_path to PTB data directory")
 
+  if FLAGS.omit_gate:
+    print('omitting gate: '+ FLAGS.omit_gate)
+  if FLAGS.use_gru:
+    print('using GRU')
+  
   raw_data = reader.ptb_raw_data(FLAGS.data_path)
   train_data, valid_data, test_data, _ = raw_data
 
@@ -346,17 +359,22 @@ def main(_):
 
     sv = tf.train.Supervisor(logdir=FLAGS.save_path)
     with sv.managed_session() as session:
+      start_time = time.time()
       for i in range(config.max_max_epoch):
         lr_decay = config.lr_decay ** max(i - config.max_epoch, 0.0)
         m.assign_lr(session, config.learning_rate * lr_decay)
 
         print("Epoch: %d Learning rate: %.3f" % (i + 1, session.run(m.lr)))
+        epoch_start_time = time.time()
         train_perplexity = run_epoch(session, m, eval_op=m.train_op,
                                      verbose=True)
+        epoch_end_time = time.time()
         print("Epoch: %d Train Perplexity: %.3f" % (i + 1, train_perplexity))
+        print("Epoch: %d Train Time: %.3f minutes" % (i + 1, (epoch_end_time-epoch_start_time)/60))
         valid_perplexity = run_epoch(session, mvalid)
         print("Epoch: %d Valid Perplexity: %.3f" % (i + 1, valid_perplexity))
 
+      print("Training complete! Total time: %.3f hours" % ((time.time()-start_time)/3600))
       test_perplexity = run_epoch(session, mtest)
       print("Test Perplexity: %.3f" % test_perplexity)
 
