@@ -2,7 +2,7 @@
 
 # first arg can be 'test', 'small', 'medium', 'large'
 
-set +x
+set -x
 
 mkdir runs
 mkdir runs/base
