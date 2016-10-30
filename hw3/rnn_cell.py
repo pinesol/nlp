@@ -319,26 +319,21 @@ class BasicLSTMCell(RNNCell):
       concat = _linear([inputs, h], 4 * self._num_units, True)
 
       # i = input_gate, j = new_input, f = forget_gate, o = output_gate
-
+      i, j, f, o = array_ops.split(1, 4, concat)
       if not FLAGS.omit_gate:
-        i, j, f, o = array_ops.split(1, 4, concat)
+        new_c = (c * sigmoid(f + self._forget_bias) + sigmoid(i) *
+                 self._activation(j))
+        new_h = self._activation(new_c) * sigmoid(o)
       elif FLAGS.omit_gate == 'i':
-        _, j, f, o = array_ops.split(1, 4, concat)
-        i = tf.get_variable('const_i', (20, 2), tf.float32,
-                            initializer=tf.constant_initializer(1.0), trainable=False)
+        new_c = (c * sigmoid(f + self._forget_bias) + self._activation(j))
+        new_h = self._activation(new_c) * sigmoid(o)
       elif FLAGS.omit_gate == 'f':
-        i, j, _, o = array_ops.split(1, 4, concat)
-        f = tf.get_variable('const_f', (20, 2), tf.float32,
-                            initializer=tf.constant_initializer(1.0), trainable=False)      
+        new_c = (c + sigmoid(i) * self._activation(j))
+        new_h = self._activation(new_c) * sigmoid(o)        
       elif FLAGS.omit_gate == 'o':
-        i, j, f, _ = array_ops.split(1, 4, concat)
-        o = tf.get_variable('const_o', (20, 2), tf.float32,
-                            initializer=tf.constant_initializer(1.0), trainable=False)
+        new_c = (c + sigmoid(i) * self._activation(j))
+        new_h = self._activation(new_c)
       
-      new_c = (c * sigmoid(f + self._forget_bias) + sigmoid(i) *
-               self._activation(j))
-      new_h = self._activation(new_c) * sigmoid(o)
-
       if self._state_is_tuple:
         new_state = LSTMStateTuple(new_c, new_h)
       else:

@@ -122,10 +122,9 @@ class PTBModel(object):
     self._initial_state = cell.zero_state(batch_size, data_type())
 
     with tf.device("/cpu:0"):
-          # TODO add self.
-      embedding = tf.get_variable(
+      self._embedding = tf.get_variable(
           "embedding", [vocab_size, size], dtype=data_type())
-      inputs = tf.nn.embedding_lookup(embedding, input_.input_data)
+      inputs = tf.nn.embedding_lookup(self._embedding, input_.input_data)
 
     if is_training and config.keep_prob < 1:
       inputs = tf.nn.dropout(inputs, config.keep_prob)
@@ -204,6 +203,10 @@ class PTBModel(object):
   def train_op(self):
     return self._train_op
 
+  @property
+  def embedding(self):
+    return self._embedding
+  
 
 class SmallConfig(object):
   """Small config."""
@@ -214,7 +217,8 @@ class SmallConfig(object):
   num_steps = 20
   hidden_size = 200
   max_epoch = 4
-  max_max_epoch = 13
+#  max_max_epoch = 13
+  max_max_epoch = 6 # TODO
   keep_prob = 1.0
   lr_decay = 0.5
   batch_size = 20
@@ -268,7 +272,7 @@ class TestConfig(object):
   batch_size = 20
   vocab_size = 10000
 
-
+  
 def run_epoch(session, model, eval_op=None, verbose=False):
   """Runs the model on the given data."""
   start_time = time.time()
@@ -315,8 +319,8 @@ def get_config():
     return TestConfig()
   else:
     raise ValueError("Invalid model: %s", FLAGS.model)
-
-
+  
+  
 def main(_):
   if not FLAGS.data_path:
     raise ValueError("Must set --data_path to PTB data directory")
@@ -325,9 +329,9 @@ def main(_):
     print('omitting gate: '+ FLAGS.omit_gate)
   if FLAGS.use_gru:
     print('using GRU')
-  
+    
   raw_data = reader.ptb_raw_data(FLAGS.data_path)
-  train_data, valid_data, test_data, _ = raw_data
+  train_data, valid_data, test_data, word_to_id = raw_data
 
   config = get_config()
   eval_config = get_config()
@@ -355,10 +359,11 @@ def main(_):
       test_input = PTBInput(config=config, data=test_data, name="TestInput")
       with tf.variable_scope("Model", reuse=True, initializer=initializer):
         mtest = PTBModel(is_training=False, config=eval_config,
-                         input_=test_input)
+                         input_=test_input)      
 
     sv = tf.train.Supervisor(logdir=FLAGS.save_path)
-    with sv.managed_session() as session:
+    
+    with sv.managed_session() as session:      
       start_time = time.time()
       for i in range(config.max_max_epoch):
         lr_decay = config.lr_decay ** max(i - config.max_epoch, 0.0)
@@ -381,7 +386,6 @@ def main(_):
       if FLAGS.save_path:
         print("Saving model to %s." % FLAGS.save_path)
         sv.saver.save(session, FLAGS.save_path, global_step=sv.global_step)
-
 
 if __name__ == "__main__":
   tf.app.run()
