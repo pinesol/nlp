@@ -117,6 +117,7 @@ class PTBModel(object):
     if is_training and config.keep_prob < 1:
       lstm_cell = tf.nn.rnn_cell.DropoutWrapper(
           lstm_cell, output_keep_prob=config.keep_prob)
+
     cell = tf.nn.rnn_cell.MultiRNNCell([lstm_cell] * config.num_layers, state_is_tuple=True)
 
     self._initial_state = cell.zero_state(batch_size, data_type())
@@ -289,9 +290,13 @@ def run_epoch(session, model, eval_op=None, verbose=False):
 
   for step in range(model.input.epoch_size):
     feed_dict = {}
-    for i, (c, h) in enumerate(model.initial_state):
-      feed_dict[c] = state[i].c
-      feed_dict[h] = state[i].h
+    if FLAGS.use_gru:
+      for i, h in enumerate(model.initial_state):
+        feed_dict[h] = state[i]
+    else:
+      for i, (c, h) in enumerate(model.initial_state):
+        feed_dict[c] = state[i].c
+        feed_dict[h] = state[i].h
 
     vals = session.run(fetches, feed_dict)
     cost = vals["cost"]

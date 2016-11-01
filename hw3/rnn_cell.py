@@ -331,7 +331,8 @@ class BasicLSTMCell(RNNCell):
         new_c = (c + sigmoid(i) * self._activation(j))
         new_h = self._activation(new_c) * sigmoid(o)        
       elif FLAGS.omit_gate == 'o':
-        new_c = (c + sigmoid(i) * self._activation(j))
+        new_c = (c * sigmoid(f + self._forget_bias) + sigmoid(i) *
+                 self._activation(j))        
         new_h = self._activation(new_c)
       
       if self._state_is_tuple:
