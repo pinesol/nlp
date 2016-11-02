@@ -212,7 +212,24 @@ class PTBModel(object):
 class SmallConfig(object):
   """Small config."""
   init_scale = 0.1
-  learning_rate = 1.0
+#TODO(GRU):  learning_rate = 1.0
+  learning_rate = 0.7 # TODO
+  max_grad_norm = 5
+  num_layers = 2
+  num_steps = 20
+  hidden_size = 200
+  max_epoch = 4
+#  max_max_epoch = 13
+  max_max_epoch = 6 # TODO
+  keep_prob = 1.0
+  lr_decay = 0.5
+  batch_size = 20
+  vocab_size = 10000
+
+class SmallGRUConfig(object):
+  """Small config for GRU."""
+  init_scale = 0.1
+  learning_rate = 0.7 # Decreased this from 1.0
   max_grad_norm = 5
   num_layers = 2
   num_steps = 20
@@ -315,7 +332,10 @@ def run_epoch(session, model, eval_op=None, verbose=False):
 
 def get_config():
   if FLAGS.model == "small":
-    return SmallConfig()
+    if FLAGS.use_gru:
+      return SmallGRUConfig()
+    else:
+      return SmallConfig()
   elif FLAGS.model == "medium":
     return MediumConfig()
   elif FLAGS.model == "large":
