@@ -48,6 +48,8 @@ tf.app.flags.DEFINE_integer("steps_per_checkpoint", 200,
                             "How many training steps to do per checkpoint.")
 tf.app.flags.DEFINE_boolean("decode", False,
                             "Set to True for interactive decoding.")
+tf.app.flags.DEFINE_boolean("eval", False,
+                            "Set to True to evaluate on the test set. Trumps the 'decode' flag.")
 tf.app.flags.DEFINE_boolean("self_test", False,
                             "Run a self-test if this is set to True.")
 tf.app.flags.DEFINE_boolean("use_fp16", False,
@@ -135,7 +137,7 @@ def train():
   """Train a en->fr translation model using WMT data."""
   # Prepare data.
   print("Preparing JA-EN data in %s" % FLAGS.data_dir)
-  en_train, ja_train, en_dev, ja_dev, en_test, ja_test, _, _ = data_utils.prepare_data(
+  en_train, ja_train, en_dev, ja_dev, _, _, _, _ = data_utils.prepare_data(
       FLAGS.data_dir, FLAGS.en_vocab_size, FLAGS.ja_vocab_size)
 
   with tf.Session() as sess:
@@ -197,9 +199,6 @@ def train():
       if current_step % FLAGS.steps_per_checkpoint == 0:
         # Print statistics for the previous epoch.
         perplexity = math.exp(float(loss)) if loss < 300 else float("inf")
-        dev_perp_summary = tf.Summary(value=[tf.Summary.Value(tag="perplexity", simple_value=perplexity)])
-        dev_summary_writer.add_summary(dev_perp_summary, global_step=model.global_step.eval())
-
         print ("global step %d learning rate %.4f step-time %.2f perplexity "
                "%.2f" % (model.global_step.eval(), model.learning_rate.eval(),
                          step_time, perplexity))
@@ -212,6 +211,7 @@ def train():
         model.saver.save(sess, checkpoint_path, global_step=model.global_step)
         step_time, loss = 0.0, 0.0
         # Run evals on development set and print their perplexity.
+        avg_eval_loss = 0.0
         for bucket_id in xrange(len(_buckets)):
           if len(dev_set[bucket_id]) == 0:
             print("  eval: empty bucket %d" % (bucket_id))
@@ -220,9 +220,16 @@ def train():
               dev_set, bucket_id)
           _, eval_loss, _ = model.step(sess, encoder_inputs, decoder_inputs,
                                        target_weights, bucket_id, True)
+          avg_eval_loss += float(eval_loss) / len(_buckets)
           eval_ppx = math.exp(float(eval_loss)) if eval_loss < 300 else float(
               "inf")
           print("  eval: bucket %d perplexity %.2f" % (bucket_id, eval_ppx))
+        # avg_eval_loss
+        if avg_eval_loss < 300:
+          avg_eval_ppx = math.exp(float(avg_eval_loss))
+          dev_perp_summary = tf.Summary(value=[tf.Summary.Value(tag="perplexity", simple_value=avg_eval_ppx)])
+          dev_summary_writer.add_summary(dev_perp_summary, global_step=model.global_step.eval())
+
         sys.stdout.flush()
     print('Finished Training')
         
@@ -231,6 +238,7 @@ def decode():
   with tf.Session() as sess:
     # Create model and load parameters.
     model = create_model(sess, True)
+    # TODO TODO This breaks this. you need the batch size to 
     model.batch_size = 1  # We decode one sentence at a time.
 
     # Load vocabularies.
@@ -278,6 +286,65 @@ def decode():
       sentence = sys.stdin.readline()
 
 
+# Very similar to decode above, except it decodes the test set, and calculate
+# the BLEU score on it.
+def eval_model():
+  _, _, _, _, en_test, ja_test, _, _ = data_utils.prepare_data(
+    FLAGS.data_dir, FLAGS.en_vocab_size, FLAGS.ja_vocab_size)
+  
+  with tf.Session() as sess:
+    # Create model and load parameters.
+    model = create_model(sess, True)
+    model.batch_size = 1  # We decode one sentence at a time. TODO this could be slow?
+
+    # Load vocabularies.
+    print('Reading in data...')
+    en_vocab_path = os.path.join(FLAGS.data_dir,
+                                 "vocab%d.en" % FLAGS.en_vocab_size)
+    ja_vocab_path = os.path.join(FLAGS.data_dir,
+                                 "vocab%d.ja" % FLAGS.ja_vocab_size)
+    # TODO I don't understand why it uses the reverse vocab for the output language.
+    # something to do with the fact that it reverse the inputs? Seems like it should
+    # be the input language vocab that is reverse.
+    ja_vocab, _ = data_utils.initialize_vocabulary(ja_vocab_path)
+    _, rev_en_vocab = data_utils.initialize_vocabulary(en_vocab_path)
+
+    print('Evaluating test data...')
+    
+    test_set = read_data(ja_test, en_test)
+    avg_eval_loss = 0.0    
+    for bucket_id in xrange(len(_buckets)):
+      print("Evaluating bucket id {}".format(bucket_id))
+      if len(test_set[bucket_id]) == 0:
+        print("test set eval: empty bucket %d" % (bucket_id))
+        continue
+      # TODO this only gets one sentence pair from test_set to eval. we need all of them per bucket
+      # TODO TODO this isn't a great function to use. batch size was set to 1 above, so this just
+      # returns one thing. but it only returns a RANDOM element of test_set, not the NEXT one.
+      # So you couldn't really scroll through everything to find the true perplexity.
+      encoder_inputs, decoder_inputs, target_weights = model.get_batch(
+        test_set, bucket_id)
+      # NOTE I think outputs_logits is a list, where each element i is a 2d matrix: d[i]: batch_size x vocab_size
+      # A single output sentence for the jth element of the batch is is d[i][j] for i in 1..bucket_size
+      _, eval_loss, output_logits = model.step(sess, encoder_inputs, decoder_inputs,
+                                               target_weights, bucket_id, True)
+      avg_eval_loss += float(eval_loss) / len(_buckets)
+      
+      # This is a greedy decoder - outputs are just argmaxes of output_logits.
+      outputs = [int(np.argmax(logit, axis=1)) for logit in output_logits]
+      # If there is an EOS symbol in outputs, cut them at that point.
+      if data_utils.EOS_ID in outputs:
+        outputs = outputs[:outputs.index(data_utils.EOS_ID)]
+      # Print out English sentence corresponding to outputs.
+      # TODO this will print out the translations for the whole test set...we don't want that.
+      print(" ".join([tf.compat.as_str(rev_en_vocab[output]) for output in outputs]))
+
+    eval_ppx = math.exp(float(avg_eval_loss)) if avg_eval_loss < 300 else float("inf")
+    print("test set eval: average perplexity %.2f" % (eval_ppx))
+
+    # TODO compute BLEU
+      
+
 def self_test():
   """Test the translation model."""
   with tf.Session() as sess:
@@ -305,6 +372,8 @@ def self_test():
 def main(_):
   if FLAGS.self_test:
     self_test()
+  elif FLAGS.eval:
+    eval_model()
   elif FLAGS.decode:
     decode()
   else:

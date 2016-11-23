@@ -171,9 +171,8 @@ def data_to_token_ids(data_path, target_path, vocabulary_path,
           tokens_file.write(" ".join([str(tok) for tok in token_ids]) + "\n")
 
 
-# TODO this may be the only function you have to modify
 def prepare_data(data_dir, en_vocabulary_size, ja_vocabulary_size, tokenizer=None):
-  """Get WMT data into data_dir, create vocabularies and tokenize data.
+  """Get data into data_dir, create vocabularies and tokenize data.
 
   Args:
     data_dir: directory in which the data sets will be stored.
