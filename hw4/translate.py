@@ -52,12 +52,16 @@ tf.app.flags.DEFINE_boolean("self_test", False,
                             "Run a self-test if this is set to True.")
 tf.app.flags.DEFINE_boolean("use_fp16", False,
                             "Train using fp16 instead of fp32.")
+tf.app.flags.DEFINE_boolean("use_attention", False,
+                            "Use the attention seq2seq model instead of the regular one.")
+tf.app.flags.DEFINE_integer("max_run_mins", 15*60, 'Number of minutes to train. '
+                            'Defaults to 15 hours (900 minutes).')
 
 FLAGS = tf.app.flags.FLAGS
 
 # We use a number of buckets and pad to the closest one for efficiency.
 # See seq2seq_model.Seq2SeqModel for details of how they work.
-_buckets = [(5, 10), (10, 15), (20, 25), (40, 50)]
+_buckets = [(5, 10), (10, 15), (20, 25), (40, 50)] # TODO adjust bucket sizes? maybe japanese is less verbose 
 
 
 def read_data(source_path, target_path, max_size=None):
@@ -97,7 +101,7 @@ def read_data(source_path, target_path, max_size=None):
         source, target = source_file.readline(), target_file.readline()
   return data_set
 
-#TODO update
+
 def create_model(session, forward_only):
   """Create translation model and initialize or load parameters in session."""
   dtype = tf.float16 if FLAGS.use_fp16 else tf.float32
@@ -112,6 +116,7 @@ def create_model(session, forward_only):
       FLAGS.learning_rate,
       FLAGS.learning_rate_decay_factor,
       forward_only=forward_only,
+      use_attention=FLAGS.use_attention,
       dtype=dtype)
   ckpt = tf.train.get_checkpoint_state(FLAGS.train_dir)
   if ckpt and tf.gfile.Exists(ckpt.model_checkpoint_path):
@@ -119,7 +124,10 @@ def create_model(session, forward_only):
     model.saver.restore(session, ckpt.model_checkpoint_path)
   else:
     print("Created model with fresh parameters.")
-    session.run(tf.global_variables_initializer())
+    # TODO global_variables_initializer() is too new for my TF
+    # using deprecated initialize_all_variables() instead.
+    #    session.run(tf.global_variables_initializer())
+    session.run(tf.initialize_all_variables())
   return model
 
 
@@ -152,11 +160,16 @@ def train():
     train_buckets_scale = [sum(train_bucket_sizes[:i + 1]) / train_total_size
                            for i in xrange(len(train_bucket_sizes))]
 
+    summary_writer = tf.train.SummaryWriter(FLAGS.train_dir, sess.graph)
+
+    # When the clock goes past this time, stop training.
+    end_time = time.time() + (60 * FLAGS.max_run_mins)
+    
     # This is the training loop.
     step_time, loss = 0.0, 0.0
     current_step = 0
     previous_losses = []
-    while True:
+    while time.time() < end_time:
       # Choose a bucket according to data distribution. We pick a random number
       # in [0, 1] and use the corresponding interval in train_buckets_scale.
       # NOTE: There's some theorem that says this is equivalent to sampling. what is the theorem?
@@ -174,10 +187,18 @@ def train():
       loss += step_loss / FLAGS.steps_per_checkpoint
       current_step += 1
 
+      if step_loss < 300:
+        train_perp = math.exp(float(step_loss))
+        train_perp_summary = tf.Summary(value=[tf.Summary.Value(tag="train_perp", simple_value=train_perp)])
+        summary_writer.add_summary(train_perp_summary, global_step=model.global_step.eval())
+      
       # Once in a while, we save checkpoint, print statistics, and run evals.
       if current_step % FLAGS.steps_per_checkpoint == 0:
         # Print statistics for the previous epoch.
         perplexity = math.exp(float(loss)) if loss < 300 else float("inf")
+        dev_perp_summary = tf.Summary(value=[tf.Summary.Value(tag="dev_perp", simple_value=perplexity)])
+        summary_writer.add_summary(dev_perp_summary, global_step=model.global_step.eval())
+
         print ("global step %d learning rate %.4f step-time %.2f perplexity "
                "%.2f" % (model.global_step.eval(), model.learning_rate.eval(),
                          step_time, perplexity))
@@ -202,7 +223,8 @@ def train():
               "inf")
           print("  eval: bucket %d perplexity %.2f" % (bucket_id, eval_ppx))
         sys.stdout.flush()
-
+    print('Finished Training')
+        
 
 def decode():
   with tf.Session() as sess:
@@ -261,7 +283,8 @@ def self_test():
     print("Self-test for neural translation model.")
     # Create model with vocabularies of 10, 2 small buckets, 2 layers of 32.
     model = seq2seq_model.Seq2SeqModel(10, 10, [(3, 3), (6, 6)], 32, 2,
-                                       5.0, 32, 0.3, 0.99, num_samples=8)
+                                       5.0, 32, 0.3, 0.99, num_samples=8,
+                                       use_attention=FLAGS.use_attention)
     # TODO global_variables_initializer() is too new for my TF
     # using deprecated initialize_all_variables() instead.
     #    sess.run(tf.global_variables_initializer())

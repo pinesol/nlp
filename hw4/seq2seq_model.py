@@ -57,6 +57,7 @@ class Seq2SeqModel(object):
                use_lstm=False,
                num_samples=512,
                forward_only=False,
+               use_attention=False,
                dtype=tf.float32):
     """Create the model.
 
@@ -79,6 +80,8 @@ class Seq2SeqModel(object):
       use_lstm: if true, we use LSTM cells instead of GRU cells.
       num_samples: number of samples for sampled softmax.
       forward_only: if set, we do not construct the backward pass in the model.
+      use_attention: if set, tf.nn.seq2seq.embedding_attention_seq2seq is used
+        instead of tf.nn.seq2seq.embedding_seq2seq.
       dtype: the data type to use to store internal variables.
     """
     self.source_vocab_size = source_vocab_size
@@ -90,7 +93,13 @@ class Seq2SeqModel(object):
     self.learning_rate_decay_op = self.learning_rate.assign(
         self.learning_rate * learning_rate_decay_factor)
     self.global_step = tf.Variable(0, trainable=False)
+    self.use_attention = use_attention
 
+    if self.use_attention:
+      print('Using attention model')
+    else:
+      print('Using non-attention model')
+    
     # If we use sampled softmax, we need an output projection.
     output_projection = None
     softmax_loss_function = None
@@ -124,16 +133,21 @@ class Seq2SeqModel(object):
 
     # The seq2seq function: we use embedding for the input and attention.
     def seq2seq_f(encoder_inputs, decoder_inputs, do_decode):
-      return tf.nn.seq2seq.embedding_attention_seq2seq(
-          encoder_inputs,
-          decoder_inputs,
-          cell,
-          num_encoder_symbols=source_vocab_size,
-          num_decoder_symbols=target_vocab_size,
-          embedding_size=size,
-          output_projection=output_projection,
-          feed_previous=do_decode,
-          dtype=dtype)
+      if self.use_attention:
+        seq2seq_model = tf.nn.seq2seq.embedding_attention_seq2seq
+      else:
+        seq2seq_model = tf.nn.seq2seq.embedding_rnn_seq2seq
+      return seq2seq_model(
+        encoder_inputs,
+        decoder_inputs,
+        cell,
+        num_encoder_symbols=source_vocab_size,
+        num_decoder_symbols=target_vocab_size,
+        embedding_size=size,
+        output_projection=output_projection,
+        feed_previous=do_decode,
+        dtype=dtype)
+
 
     # Feeds for inputs.
     self.encoder_inputs = []
@@ -202,7 +216,7 @@ class Seq2SeqModel(object):
 
     Returns:
       A triple consisting of gradient norm (or None if we did not do backward),
-      average perplexity, and the outputs.
+      average log perplexity, and the outputs.
 
     Raises:
       ValueError: if length of encoder_inputs, decoder_inputs, or
