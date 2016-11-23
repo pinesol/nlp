@@ -124,7 +124,7 @@ def create_model(session, forward_only):
     model.saver.restore(session, ckpt.model_checkpoint_path)
   else:
     print("Created model with fresh parameters.")
-    # TODO global_variables_initializer() is too new for my TF
+    # NOTE global_variables_initializer() is too new for my TF
     # using deprecated initialize_all_variables() instead.
     #    session.run(tf.global_variables_initializer())
     session.run(tf.initialize_all_variables())
@@ -160,7 +160,8 @@ def train():
     train_buckets_scale = [sum(train_bucket_sizes[:i + 1]) / train_total_size
                            for i in xrange(len(train_bucket_sizes))]
 
-    summary_writer = tf.train.SummaryWriter(FLAGS.train_dir, sess.graph)
+    train_summary_writer = tf.train.SummaryWriter(os.path.join(FLAGS.train_dir, 'train'), sess.graph)
+    dev_summary_writer = tf.train.SummaryWriter(os.path.join(FLAGS.train_dir, 'dev'), sess.graph)
 
     # When the clock goes past this time, stop training.
     end_time = time.time() + (60 * FLAGS.max_run_mins)
@@ -189,15 +190,15 @@ def train():
 
       if step_loss < 300:
         train_perp = math.exp(float(step_loss))
-        train_perp_summary = tf.Summary(value=[tf.Summary.Value(tag="train_perp", simple_value=train_perp)])
-        summary_writer.add_summary(train_perp_summary, global_step=model.global_step.eval())
+        train_perp_summary = tf.Summary(value=[tf.Summary.Value(tag="perplexity", simple_value=train_perp)])
+        train_summary_writer.add_summary(train_perp_summary, global_step=model.global_step.eval())
       
       # Once in a while, we save checkpoint, print statistics, and run evals.
       if current_step % FLAGS.steps_per_checkpoint == 0:
         # Print statistics for the previous epoch.
         perplexity = math.exp(float(loss)) if loss < 300 else float("inf")
-        dev_perp_summary = tf.Summary(value=[tf.Summary.Value(tag="dev_perp", simple_value=perplexity)])
-        summary_writer.add_summary(dev_perp_summary, global_step=model.global_step.eval())
+        dev_perp_summary = tf.Summary(value=[tf.Summary.Value(tag="perplexity", simple_value=perplexity)])
+        dev_summary_writer.add_summary(dev_perp_summary, global_step=model.global_step.eval())
 
         print ("global step %d learning rate %.4f step-time %.2f perplexity "
                "%.2f" % (model.global_step.eval(), model.learning_rate.eval(),
@@ -285,7 +286,7 @@ def self_test():
     model = seq2seq_model.Seq2SeqModel(10, 10, [(3, 3), (6, 6)], 32, 2,
                                        5.0, 32, 0.3, 0.99, num_samples=8,
                                        use_attention=FLAGS.use_attention)
-    # TODO global_variables_initializer() is too new for my TF
+    # NOTE global_variables_initializer() is too new for my TF
     # using deprecated initialize_all_variables() instead.
     #    sess.run(tf.global_variables_initializer())
     sess.run(tf.initialize_all_variables())
