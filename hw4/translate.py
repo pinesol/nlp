@@ -17,6 +17,7 @@ import random
 import sys
 import time
 import logging
+import nltk
 
 import numpy as np
 from six.moves import xrange  # pylint: disable=redefined-builtin
@@ -103,6 +104,34 @@ def read_data(source_path, target_path, max_size=None):
         source, target = source_file.readline(), target_file.readline()
   return data_set
 
+
+# Exactly like read_data, except that it returns the raw test data strings for
+# 'data/test.en', organized by buckets
+def read_test_data_toks(source_path, target_path, max_size=None):
+  data_set = [[] for _ in _buckets]
+  with tf.gfile.GFile(source_path, mode="r") as source_file:
+    with tf.gfile.GFile(target_path, mode="r") as target_file:
+      with tf.gfile.GFile('data/test.en', mode="r") as test_target_file:
+        source, target = source_file.readline(), target_file.readline()
+        test_target_line = test_target_file.readline()
+        counter = 0
+        while source and target and (not max_size or counter < max_size):
+          counter += 1
+          if counter % 100000 == 0:
+            print("  reading data line %d" % counter)
+            sys.stdout.flush()
+          source_ids = [int(x) for x in source.split()]
+          target_ids = [int(x) for x in target.split()]
+          target_ids.append(data_utils.EOS_ID)
+          test_target_toks = test_target_line.split()
+          for bucket_id, (source_size, target_size) in enumerate(_buckets):
+            if len(source_ids) < source_size and len(target_ids) < target_size:
+              data_set[bucket_id].append(test_target_toks)
+              break
+          source, target = source_file.readline(), target_file.readline()
+          test_target_line = test_target_file.readline()
+  return data_set
+  
 
 def create_model(session, forward_only):
   """Create translation model and initialize or load parameters in session."""
@@ -295,7 +324,8 @@ def eval_model():
   with tf.Session() as sess:
     # Create model and load parameters.
     model = create_model(sess, True)
-    model.batch_size = 1  # We decode one sentence at a time. TODO this could be slow?
+    # This has to be 1 for eval, otherwise you can't eval them all, since you can only run the model on a full batch.
+    model.batch_size = 1
 
     # Load vocabularies.
     print('Reading in data...')
@@ -310,39 +340,65 @@ def eval_model():
     _, rev_en_vocab = data_utils.initialize_vocabulary(en_vocab_path)
 
     print('Evaluating test data...')
-    
+
     test_set = read_data(ja_test, en_test)
-    avg_eval_loss = 0.0    
+    test_set_target_toks = read_test_data_toks(ja_test, en_test)
+    
+    sum_eval_loss = 0.0
+    sum_bleu_score = 0.0
+    num_evaled = 0.0
+    
+    num_bad_outputs = 0
+    num_zero_div_errors = 0
+    
     for bucket_id in xrange(len(_buckets)):
       print("Evaluating bucket id {}".format(bucket_id))
       if len(test_set[bucket_id]) == 0:
         print("test set eval: empty bucket %d" % (bucket_id))
         continue
-      # TODO this only gets one sentence pair from test_set to eval. we need all of them per bucket
-      # TODO TODO this isn't a great function to use. batch size was set to 1 above, so this just
-      # returns one thing. but it only returns a RANDOM element of test_set, not the NEXT one.
-      # So you couldn't really scroll through everything to find the true perplexity.
-      encoder_inputs, decoder_inputs, target_weights = model.get_batch(
-        test_set, bucket_id)
-      # NOTE I think outputs_logits is a list, where each element i is a 2d matrix: d[i]: batch_size x vocab_size
-      # A single output sentence for the jth element of the batch is is d[i][j] for i in 1..bucket_size
-      _, eval_loss, output_logits = model.step(sess, encoder_inputs, decoder_inputs,
-                                               target_weights, bucket_id, True)
-      avg_eval_loss += float(eval_loss) / len(_buckets)
-      
-      # This is a greedy decoder - outputs are just argmaxes of output_logits.
-      outputs = [int(np.argmax(logit, axis=1)) for logit in output_logits]
-      # If there is an EOS symbol in outputs, cut them at that point.
-      if data_utils.EOS_ID in outputs:
-        outputs = outputs[:outputs.index(data_utils.EOS_ID)]
-      # Print out English sentence corresponding to outputs.
-      # TODO this will print out the translations for the whole test set...we don't want that.
-      print(" ".join([tf.compat.as_str(rev_en_vocab[output]) for output in outputs]))
+      bucket_idx = 0
+      for encoder_inputs, decoder_inputs, target_weights in model.get_batches(test_set, bucket_id):
+        # NOTE I think outputs_logits is a list, where each element i is a 2d matrix: d[i]: batch_size x vocab_size
+        # A single output sentence for the jth element of the batch is is d[i][j] for i in 1..bucket_size
+        _, eval_loss, output_logits = model.step(sess, encoder_inputs, decoder_inputs,
+                                                 target_weights, bucket_id, True)
+        sum_eval_loss += float(eval_loss)
+        num_evaled += model.batch_size
+        # This is a greedy decoder - outputs are just argmaxes of output_logits.
+        # If there is an EOS symbol in outputs, cut them at that point.        
+        outputs = [int(np.argmax(logit, axis=1)) for logit in output_logits]
+        if data_utils.EOS_ID in outputs:
+          outputs = outputs[:outputs.index(data_utils.EOS_ID)]
+          output_toks = [tf.compat.as_str(rev_en_vocab[output]) for output in outputs]
 
+          # Not using this because it has UNKs, using the real output instead
+#          test_outputs = decoder_inputs[:decoder_inputs.index(data_utils.EOS_ID)]
+#          test_target_toks = [tf.compat.as_str(rev_en_vocab[test_output]) for test_output in test_outputs]
+          test_target_toks = test_set_target_toks[bucket_id][bucket_idx]
+          # Print out English sentence corresponding to outputs.
+#          print("expected: {}, actual: {}".format(" ".join(test_target_toks), " ".join(output_toks)))
+#          print(bucket_idx)
+#          print(" ".join(output_toks))
+#          print(" ".join(test_target_toks))
+#          print(" ".join(test_set_target_toks[bucket_id][bucket_idx]))
+          try:
+            sum_bleu_score += nltk.translate.bleu_score.sentence_bleu([output_toks], test_target_toks)
+          except ZeroDivisionError as e:
+            num_zero_div_errors += 1
+        else:
+          num_bad_outputs += 1
+        bucket_idx += 1
+
+    avg_eval_loss = sum_eval_loss / num_evaled
     eval_ppx = math.exp(float(avg_eval_loss)) if avg_eval_loss < 300 else float("inf")
     print("test set eval: average perplexity %.2f" % (eval_ppx))
 
-    # TODO compute BLEU
+    avg_bleu_score = sum_bleu_score / num_evaled
+    print("test set eval: average bleu score %.2f" % (avg_bleu_score))
+    
+    print("Number of inputs whose translation didn't have EOS: {}".format(num_bad_outputs))
+    print("Number zero-division errors calculating BLEU: {}".format(num_zero_div_errors))
+
       
 
 def self_test():
