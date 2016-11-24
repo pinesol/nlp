@@ -17,7 +17,7 @@ import random
 import sys
 import time
 import logging
-import nltk
+#import nltk
 
 import numpy as np
 from six.moves import xrange  # pylint: disable=redefined-builtin
@@ -28,6 +28,7 @@ import tensorflow as tf
 # using local versions of these
 import data_utils
 import seq2seq_model
+import bleu
 
 
 tf.app.flags.DEFINE_float("learning_rate", 0.5, "Learning rate.")
@@ -382,7 +383,7 @@ def eval_model():
 #          print(" ".join(test_target_toks))
 #          print(" ".join(test_set_target_toks[bucket_id][bucket_idx]))
           try:
-            sum_bleu_score += nltk.translate.bleu_score.sentence_bleu([output_toks], test_target_toks)
+            sum_bleu_score += bleu.sentence_bleu([output_toks], test_target_toks)
           except ZeroDivisionError as e:
             num_zero_div_errors += 1
         else:
