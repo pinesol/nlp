@@ -319,6 +319,7 @@ def decode():
 # Very similar to decode above, except it decodes the test set, and calculate
 # the BLEU score on it.
 def eval_model():
+  print('Evaluating model...')
   _, _, _, _, en_test, ja_test, _, _ = data_utils.prepare_data(
     FLAGS.data_dir, FLAGS.en_vocab_size, FLAGS.ja_vocab_size)
   

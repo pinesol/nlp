@@ -30,6 +30,7 @@ module load tensorflow/python2.7/20161029
 module load scipy/intel/0.18.0
 module load nltk/3.0.2
 
-python translate.py ${@:2}
+python translate.py ${@:2} && \
+python translate.py --eval ${@:2}
 
 " > ${experiment_name}.pbs
