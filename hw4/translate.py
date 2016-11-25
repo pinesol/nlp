@@ -319,6 +319,7 @@ def decode():
 # Very similar to decode above, except it decodes the test set, and calculate
 # the BLEU score on it.
 def eval_model():
+  print('Evaluating model...')
   _, _, _, _, en_test, ja_test, _, _ = data_utils.prepare_data(
     FLAGS.data_dir, FLAGS.en_vocab_size, FLAGS.ja_vocab_size)
   
@@ -364,7 +365,7 @@ def eval_model():
         _, eval_loss, output_logits = model.step(sess, encoder_inputs, decoder_inputs,
                                                  target_weights, bucket_id, True)
         sum_eval_loss += float(eval_loss)
-        num_evaled += model.batch_size
+        num_evaled += 1
         # This is a greedy decoder - outputs are just argmaxes of output_logits.
         # If there is an EOS symbol in outputs, cut them at that point.        
         outputs = [int(np.argmax(logit, axis=1)) for logit in output_logits]
