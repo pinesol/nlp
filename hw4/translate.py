@@ -60,6 +60,7 @@ tf.app.flags.DEFINE_boolean("use_attention", False,
                             "Use the attention seq2seq model instead of the regular one.")
 tf.app.flags.DEFINE_integer("max_run_mins", 15*60, 'Number of minutes to train. '
                             'Defaults to 15 hours (900 minutes).')
+tf.app.flags.DEFINE_boolean("use_adam", False, "If true, the adam optimizer is used instead of SGD")
 
 FLAGS = tf.app.flags.FLAGS
 
@@ -149,6 +150,7 @@ def create_model(session, forward_only):
       FLAGS.learning_rate_decay_factor,
       forward_only=forward_only,
       use_attention=FLAGS.use_attention,
+      use_adam=FLAGS.use_adam,
       dtype=dtype)
   ckpt = tf.train.get_checkpoint_state(FLAGS.train_dir)
   if ckpt and tf.gfile.Exists(ckpt.model_checkpoint_path):
@@ -233,7 +235,8 @@ def train():
                "%.2f" % (model.global_step.eval(), model.learning_rate.eval(),
                          step_time, perplexity))
         # Decrease learning rate if no improvement was seen over last 3 times.
-        if len(previous_losses) > 2 and loss > max(previous_losses[-3:]):
+        # Only do this if you're not using the ADAM optimizer, which does this automagically (I think).
+        if not FLAGS.use_adam and len(previous_losses) > 2 and loss > max(previous_losses[-3:]):
           sess.run(model.learning_rate_decay_op)
         previous_losses.append(loss)
         # Save checkpoint and zero timer and loss.

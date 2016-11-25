@@ -58,6 +58,7 @@ class Seq2SeqModel(object):
                num_samples=512,
                forward_only=False,
                use_attention=False,
+               use_adam=False,
                dtype=tf.float32):
     """Create the model.
 
@@ -82,6 +83,7 @@ class Seq2SeqModel(object):
       forward_only: if set, we do not construct the backward pass in the model.
       use_attention: if set, tf.nn.seq2seq.embedding_attention_seq2seq is used
         instead of tf.nn.seq2seq.embedding_seq2seq.
+      use_adam: Use the AdamOptimizer.
       dtype: the data type to use to store internal variables.
     """
     self.source_vocab_size = source_vocab_size
@@ -94,12 +96,17 @@ class Seq2SeqModel(object):
         self.learning_rate * learning_rate_decay_factor)
     self.global_step = tf.Variable(0, trainable=False)
     self.use_attention = use_attention
+    self.use_adam = use_adam
 
     if self.use_attention:
       print('Using attention model')
     else:
       print('Using non-attention model')
-    
+    if self.use_adam:
+      print('Using adam optimizer')
+    else:
+      print('Using SGD optimizer')
+      
     # If we use sampled softmax, we need an output projection.
     output_projection = None
     softmax_loss_function = None
@@ -191,7 +198,10 @@ class Seq2SeqModel(object):
     if not forward_only:
       self.gradient_norms = []
       self.updates = []
-      opt = tf.train.GradientDescentOptimizer(self.learning_rate)
+      if self.use_adam:
+        opt = tf.train.AdamOptimizer(self.learning_rate)
+      else:
+        opt = tf.train.GradientDescentOptimizer(self.learning_rate)
       for b in xrange(len(buckets)):
         gradients = tf.gradients(self.losses[b], params)
         clipped_gradients, norm = tf.clip_by_global_norm(gradients,
@@ -342,9 +352,12 @@ class Seq2SeqModel(object):
     encoder_size, decoder_size = self.buckets[bucket_id]
 
     data_size = len(data[bucket_id])
+    # NOTE: This leaves off the data that doesn't fit in a single batch. It
+    # might work with partial batches, but that's a rabbit hole I don't want to
+    # go down right now.
     num_batches = int(data_size / self.batch_size)
     print('Sentence pairs in bucket {}: {}'.format(bucket_id, data_size))
-#    print('Batches bucket in {}: {}'.format(bucket_id, num_batches))
+    print('Batches bucket in {}: {}'.format(bucket_id, num_batches))
     # Shuffle the order of the batches, and extract each batch one by one.
     for batch_num in xrange(num_batches):
       encoder_inputs, decoder_inputs = [], []
